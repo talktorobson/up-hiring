@@ -8,13 +8,11 @@ Endpoints públicos passam livremente. Demais exigem token válido.
 import logging
 from uuid import UUID
 
-import httpx
 from fastapi import HTTPException, Request, status
 from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from src.config import settings
 from src.db.session import current_tenant_id
 
 logger = logging.getLogger(__name__)
