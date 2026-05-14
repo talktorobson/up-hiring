@@ -1,0 +1,42 @@
+# Fly.io config para UpHiring API
+# Deploy: `flyctl deploy` (após `flyctl launch --no-deploy` no setup inicial)
+
+app = "up-hiring-api"
+primary_region = "gru"  # São Paulo
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  APP_ENV = "production"
+  LOG_LEVEL = "INFO"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0  # liga em demanda, free tier
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512  # subir para 1024 quando necessário
+  size = "shared-cpu-1x"
+
+# Workers RQ (descomentar quando começar a processar jobs assíncronos, Fase 2+)
+# [[processes]]
+#   worker = "uv run rq worker --url $REDIS_URL"
