@@ -170,6 +170,8 @@ async def update_candidate(
         action="candidate.updated",
         actor_user_id=actor_user_id,
     )
+    # Captura updated_at antes do commit pra evitar lazy load em async.
+    await session.refresh(candidate, ["updated_at"])
     await session.commit()
     return CandidateRead.model_validate(candidate)
 
