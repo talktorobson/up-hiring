@@ -8,10 +8,10 @@ Endpoints públicos passam livremente. Demais exigem token válido.
 import logging
 from uuid import UUID
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from src.db.session import current_tenant_id
 
@@ -23,6 +23,13 @@ PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/api/v1/webhooks/clerk"}
 CLERK_JWKS_URL = "https://api.clerk.com/v1/jwks"
 
 
+def _unauthorized(detail: str) -> JSONResponse:
+    # Returning a Response — not raising HTTPException — because BaseHTTPMiddleware
+    # does not route exceptions through FastAPI's exception handlers, so a raise
+    # would leak as a generic 500. See issue #24.
+    return JSONResponse({"detail": detail}, status_code=status.HTTP_401_UNAUTHORIZED)
+
+
 class ClerkAuthMiddleware(BaseHTTPMiddleware):
     """Valida JWT Clerk e popula request.state.user_id, request.state.org_id."""
 
@@ -32,10 +39,7 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
 
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing Bearer token",
-            )
+            return _unauthorized("Missing Bearer token")
 
         token = auth_header.removeprefix("Bearer ").strip()
 
@@ -44,16 +48,13 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             claims = jwt.get_unverified_claims(token)
         except JWTError as exc:
             logger.warning("invalid_jwt", exc_info=exc)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-            ) from exc
+            return _unauthorized("Invalid token")
 
         user_id = claims.get("sub")
         org_id = claims.get("org_id")
 
         if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing user")
+            return _unauthorized("Missing user")
 
         request.state.user_id = user_id
         request.state.org_id = org_id
