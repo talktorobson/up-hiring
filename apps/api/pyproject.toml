@@ -59,6 +59,9 @@ extend-immutable-calls = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-ra -q --cov=src --cov-report=term-missing"
+markers = [
+    "rls: testes de Row Level Security (rodam contra Postgres real)",
+]
 
 [build-system]
 requires = ["hatchling"]

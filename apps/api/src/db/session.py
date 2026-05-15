@@ -27,13 +27,18 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Yield session com tenant_id setado via SET LOCAL para RLS funcionar."""
+    """Yield session com tenant_id setado via SET LOCAL para RLS funcionar.
+
+    `SET LOCAL` em Postgres é uma diretiva de runtime, não suporta parameter
+    binding (asyncpg levanta `syntax error at or near "$1"`). A interpolação
+    direta é segura porque `tenant_id` é tipado como `UUID` — qualquer string
+    arbitrária quebra antes de chegar aqui.
+    """
     async with AsyncSessionLocal() as session:
         tenant_id = current_tenant_id.get()
         if tenant_id is not None:
             await session.execute(
-                text("SET LOCAL app.current_tenant_id = :tid"),
-                {"tid": str(tenant_id)},
+                text(f"SET LOCAL app.current_tenant_id = '{tenant_id}'")
             )
         try:
             yield session

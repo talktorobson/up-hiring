@@ -93,23 +93,17 @@ def _run_admin_sql(*statements: str) -> None:
 
 
 def _create_test_db() -> None:
+    # `WITH (FORCE)` (PG 13+) encerra conexões + dropa atomicamente — sem isso
+    # ficamos numa corrida onde pg_terminate_backend retorna antes do backend
+    # de fato fechar e o DROP segue erranndo "ObjectInUse".
     _run_admin_sql(
-        f"DROP DATABASE IF EXISTS {TEST_DB_NAME}",
+        f"DROP DATABASE IF EXISTS {TEST_DB_NAME} WITH (FORCE)",
         f"CREATE DATABASE {TEST_DB_NAME}",
     )
 
 
 def _drop_test_db() -> None:
-    # Encerra conexões pendentes antes do drop (engine.dispose pode não ter
-    # terminado de fechar tudo no momento do teardown da sessão).
-    _run_admin_sql(
-        f"""
-        SELECT pg_terminate_backend(pid)
-        FROM pg_stat_activity
-        WHERE datname = '{TEST_DB_NAME}' AND pid <> pg_backend_pid()
-        """,
-        f"DROP DATABASE IF EXISTS {TEST_DB_NAME}",
-    )
+    _run_admin_sql(f"DROP DATABASE IF EXISTS {TEST_DB_NAME} WITH (FORCE)")
 
 
 def _migrate_test_db() -> None:
@@ -160,10 +154,15 @@ async def db_engine():
 
 
 async def _truncate_all(engine) -> None:
+    # DELETE em vez de TRUNCATE: TRUNCATE precisa de ACCESS EXCLUSIVE lock e
+    # qualquer conexão idle-in-transaction de fixtures anteriores trava o
+    # cleanup. DELETE usa locks linha-a-linha — não há deadlock se as outras
+    # conns estão idle.
     async with engine.begin() as conn:
-        await conn.execute(
-            text("TRUNCATE TABLE membership, app_user, tenant RESTART IDENTITY CASCADE")
-        )
+        await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+        await conn.execute(text("DELETE FROM membership"))
+        await conn.execute(text("DELETE FROM app_user"))
+        await conn.execute(text("DELETE FROM tenant"))
 
 
 @pytest_asyncio.fixture
