@@ -49,6 +49,8 @@ os.environ.setdefault(
 os.environ.setdefault("CLERK_AUDIENCE", "")  # validation off
 os.environ.setdefault("APP_ENV", "test")
 
+from datetime import UTC  # noqa: E402
+
 import psycopg2  # noqa: E402
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
@@ -269,6 +271,40 @@ def jwks_mock(rsa_keypair):
 
 
 @pytest.fixture
+def svix_signed_request() -> Callable[..., dict]:
+    """Forja headers svix-* assinando o body com `CLERK_WEBHOOK_SECRET`."""
+    import json
+    from datetime import datetime
+    from uuid import uuid4
+
+    from svix.webhooks import Webhook
+
+    secret = os.environ["CLERK_WEBHOOK_SECRET"]
+
+    def _make(payload: dict, *, msg_id: str | None = None, override_sig: str | None = None):
+        body_str = json.dumps(payload)
+        body = body_str.encode()
+        msg_id = msg_id or f"msg_{uuid4().hex[:16]}"
+        # Floor pra int e reconverte pra datetime — sem isso `sign` arredonda
+        # internamente e `verify` (que lê o int do header) não bate.
+        ts_int = int(datetime.now(UTC).timestamp())
+        ts = datetime.fromtimestamp(ts_int, tz=UTC)
+        # svix.sign quer str; verify aceita bytes ou str.
+        signature = override_sig or Webhook(secret).sign(msg_id, ts, body_str)
+        return {
+            "body": body,
+            "headers": {
+                "svix-id": msg_id,
+                "svix-timestamp": str(ts_int),
+                "svix-signature": signature,
+                "Content-Type": "application/json",
+            },
+        }
+
+    return _make
+
+
+@pytest.fixture
 def clerk_token_for(rsa_keypair) -> Callable[..., str]:
     """Forja JWT assinado pela chave de teste; aceita kwargs como overrides do payload."""
     pem = rsa_keypair["private_pem"]
@@ -304,8 +340,32 @@ def clerk_token_for(rsa_keypair) -> Callable[..., str]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(autouse=True)
-def reset_tenant_redis_singleton():
-    """Garante que o singleton de Redis no tenant service não vaze entre testes."""
+@pytest_asyncio.fixture(autouse=True)
+async def reset_tenant_redis_singleton():
+    """Limpa o cache de tenant entre testes (FLUSHDB no Redis local) e
+    força nova conexão na próxima call."""
+    import redis.asyncio as redis_async
+
+    client = redis_async.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+    try:
+        await client.flushdb()
+    finally:
+        await client.aclose()
     yield
     tenant_service.reset_redis()
+
+
+@pytest.fixture(autouse=True)
+def patch_db_session_module(db_engine, monkeypatch):
+    """O engine de prod em `src.db.session` é criado no import e atrela conns
+    a um event loop. Pytest-asyncio cria loop por teste — sem patch o
+    middleware/handlers falam com pool stale ("attached to a different loop").
+
+    Patcha em TODOS os módulos que fizeram `from src.db.session import
+    AsyncSessionLocal` — refs diretas não pegam o patch só na origem.
+    """
+    factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr("src.db.session.engine", db_engine)
+    monkeypatch.setattr("src.db.session.AsyncSessionLocal", factory)
+    monkeypatch.setattr("src.middleware.clerk.AsyncSessionLocal", factory)
+    monkeypatch.setattr("src.services.webhook_handlers.AsyncSessionLocal", factory)
