@@ -342,15 +342,22 @@ def clerk_token_for(rsa_keypair) -> Callable[..., str]:
 
 @pytest_asyncio.fixture(autouse=True)
 async def reset_tenant_redis_singleton():
-    """Limpa o cache de tenant entre testes (FLUSHDB no Redis local) e
-    força nova conexão na próxima call."""
+    """Limpa o cache de tenant entre testes (best-effort) e força nova
+    conexão. Se o Redis não está disponível (CI sem o serviço), o cache
+    do `src.services.tenant` cai pro DB silenciosamente — testes que
+    dependem da camada de cache devem skipar via `redis_available`.
+    """
     import redis.asyncio as redis_async
 
-    client = redis_async.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
     try:
+        client = redis_async.from_url(
+            os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+            socket_connect_timeout=0.5,
+        )
         await client.flushdb()
-    finally:
         await client.aclose()
+    except Exception:
+        pass
     yield
     tenant_service.reset_redis()
 
