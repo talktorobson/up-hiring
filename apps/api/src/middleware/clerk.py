@@ -1,26 +1,27 @@
 """Middleware de autenticação Clerk.
 
 Valida JWT do Clerk presente no header Authorization, extrai user_id e org_id,
-injeta no contexto da request (e no ContextVar de tenant para a sessão DB usar RLS).
+injeta no contexto da request (e no ContextVar de tenant para a sessão DB usar
+RLS).
 
 Endpoints públicos passam livremente. Demais exigem token válido.
 """
 import logging
 from uuid import UUID
 
+import sentry_sdk
 from fastapi import Request, status
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
+from src.config import settings
 from src.db.session import current_tenant_id
+from src.middleware.jwks import get_jwks_client
 
 logger = logging.getLogger(__name__)
 
 PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/api/v1/webhooks/clerk"}
-
-# Em produção, baixe e cache o JWKS do Clerk. Implementação simples aqui para Sprint 2.
-CLERK_JWKS_URL = "https://api.clerk.com/v1/jwks"
 
 
 def _unauthorized(detail: str) -> JSONResponse:
@@ -28,6 +29,34 @@ def _unauthorized(detail: str) -> JSONResponse:
     # does not route exceptions through FastAPI's exception handlers, so a raise
     # would leak as a generic 500. See issue #24.
     return JSONResponse({"detail": detail}, status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+def _breadcrumb(message: str, **data: object) -> None:
+    sentry_sdk.add_breadcrumb(
+        category="auth.clerk", level="warning", message=message, data=data
+    )
+
+
+async def _decode_token(token: str) -> dict:
+    """Decode + verifica RS256 contra JWKS. Levanta JWTError em qualquer falha."""
+    if settings.clerk_skip_verify:
+        # Fallback DEBUG. Garantir nunca em prod via assert defensivo.
+        if settings.app_env == "prod":
+            raise RuntimeError("clerk_skip_verify=True em produção é proibido")
+        return jwt.get_unverified_claims(token)
+
+    header = jwt.get_unverified_header(token)
+    kid = header.get("kid")
+    if not kid:
+        raise JWTError("token header missing kid")
+
+    key = await get_jwks_client().get_key(kid)
+    decode_kwargs: dict[str, object] = {"algorithms": ["RS256"]}
+    if settings.clerk_audience:
+        decode_kwargs["audience"] = settings.clerk_audience
+    if settings.clerk_issuer:
+        decode_kwargs["issuer"] = settings.clerk_issuer
+    return jwt.decode(token, key, **decode_kwargs)
 
 
 class ClerkAuthMiddleware(BaseHTTPMiddleware):
@@ -44,26 +73,27 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
         token = auth_header.removeprefix("Bearer ").strip()
 
         try:
-            # TODO: cachear JWKS e validar assinatura corretamente
-            claims = jwt.get_unverified_claims(token)
+            claims = await _decode_token(token)
+        except ExpiredSignatureError:
+            _breadcrumb("token expired")
+            return _unauthorized("Token expired")
+        except KeyError as exc:
+            _breadcrumb("kid not in JWKS", error=str(exc))
+            return _unauthorized("Unknown signing key")
         except JWTError as exc:
-            logger.warning("invalid_jwt", exc_info=exc)
+            _breadcrumb("jwt decode failed", error=exc.__class__.__name__)
             return _unauthorized("Invalid token")
 
         user_id = claims.get("sub")
         org_id = claims.get("org_id")
-
         if not user_id:
             return _unauthorized("Missing user")
 
         request.state.user_id = user_id
         request.state.org_id = org_id
 
-        # Resolve tenant_id local a partir do org_id Clerk
-        # Em produção, fazer cache em Redis para evitar query por request.
+        # TODO(#33): substituir pelo lookup real em src/services/tenant.py.
         if org_id:
-            # TODO: lookup tenant_id por clerk_org_id na tabela tenant
-            # Placeholder: usar org_id como tenant_id se já for UUID válido
             try:
                 token_tenant = UUID(org_id) if len(org_id) == 36 else None
                 if token_tenant:
