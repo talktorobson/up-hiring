@@ -10,7 +10,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
-from src.db.rls import disable_rls_sql, enable_rls_sql
+from src.db.rls import disable_rls_sql, enable_rls_for_tenant_table, enable_rls_sql
 
 # revision identifiers, used by Alembic.
 revision: str = "5580eabe8ece"
@@ -116,17 +116,9 @@ def upgrade() -> None:
         "GRANT SELECT, INSERT, UPDATE, DELETE ON tenant, app_user, membership TO uphiring_app;"
     )
 
-    # RLS na tabela tenant: a chave é `id`, não `tenant_id`. Inline aqui — o
-    # helper `enable_rls_for_tenant_table` será extraído em #31.
-    op.execute("ALTER TABLE tenant ENABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE tenant FORCE ROW LEVEL SECURITY;")
-    op.execute(
-        """
-        CREATE POLICY tenant_isolation_tenant ON tenant
-        USING (id = current_setting('app.current_tenant_id', true)::uuid)
-        WITH CHECK (id = current_setting('app.current_tenant_id', true)::uuid);
-        """
-    )
+    # RLS na tabela tenant: chave é `id`, não `tenant_id`.
+    for stmt in enable_rls_for_tenant_table():
+        op.execute(stmt)
 
     # RLS em membership via helper padrão (tenant_id).
     for stmt in enable_rls_sql("membership"):
@@ -138,9 +130,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     for stmt in disable_rls_sql("membership"):
         op.execute(stmt)
-
-    op.execute("DROP POLICY IF EXISTS tenant_isolation_tenant ON tenant;")
-    op.execute("ALTER TABLE tenant DISABLE ROW LEVEL SECURITY;")
+    for stmt in disable_rls_sql("tenant"):
+        op.execute(stmt)
 
     op.execute(
         "REVOKE SELECT, INSERT, UPDATE, DELETE ON tenant, app_user, membership "
