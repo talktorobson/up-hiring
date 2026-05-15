@@ -160,8 +160,15 @@ async def _truncate_all(engine) -> None:
     # qualquer conexão idle-in-transaction de fixtures anteriores trava o
     # cleanup. DELETE usa locks linha-a-linha — não há deadlock se as outras
     # conns estão idle.
+    # Ordem importa: FKs apontam de application → stage/job/candidate,
+    # activity → app_user, membership → tenant/app_user.
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+        await conn.execute(text("DELETE FROM activity"))
+        await conn.execute(text("DELETE FROM application"))
+        await conn.execute(text("DELETE FROM stage"))
+        await conn.execute(text("DELETE FROM candidate"))
+        await conn.execute(text("DELETE FROM job"))
         await conn.execute(text("DELETE FROM membership"))
         await conn.execute(text("DELETE FROM app_user"))
         await conn.execute(text("DELETE FROM tenant"))

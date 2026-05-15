@@ -49,3 +49,12 @@ EMPLOYMENT_TYPE_ENUM_NAME = "employment_type_enum"
 STAGE_KIND_ENUM_NAME = "stage_kind_enum"
 APPLICATION_STATUS_ENUM_NAME = "application_status_enum"
 ACTIVITY_ENTITY_TYPE_ENUM_NAME = "activity_entity_type_enum"
+
+
+def enum_values(enum_cls):
+    """SAEnum `values_callable`: stores StrEnum.value (lowercase) instead of .name (UPPER).
+
+    Without this, Postgres ends up with labels like 'OPEN' instead of 'open',
+    breaking raw SQL filters that expect StrEnum.value.
+    """
+    return [member.value for member in enum_cls]

@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base, TenantScopedMixin, TimestampMixin, new_uuid
-from src.models.enums import APPLICATION_STATUS_ENUM_NAME, ApplicationStatus
+from src.models.enums import APPLICATION_STATUS_ENUM_NAME, ApplicationStatus, enum_values
 
 
 class Application(Base, TenantScopedMixin, TimestampMixin):
@@ -29,7 +29,12 @@ class Application(Base, TenantScopedMixin, TimestampMixin):
         PG_UUID(as_uuid=True), ForeignKey("stage.id"), nullable=False
     )
     status: Mapped[ApplicationStatus] = mapped_column(
-        SAEnum(ApplicationStatus, name=APPLICATION_STATUS_ENUM_NAME, native_enum=True),
+        SAEnum(
+            ApplicationStatus,
+            name=APPLICATION_STATUS_ENUM_NAME,
+            native_enum=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
         default=ApplicationStatus.ACTIVE,
     )
