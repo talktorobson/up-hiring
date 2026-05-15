@@ -377,9 +377,35 @@ def patch_db_session_module(db_engine, monkeypatch):
 
     Patcha em TODOS os módulos que fizeram `from src.db.session import
     AsyncSessionLocal` — refs diretas não pegam o patch só na origem.
+
+    Adicionalmente, o `get_db` é substituído via FastAPI dependency_overrides
+    para `SET LOCAL ROLE uphiring_app` em cada request — sem isso o usuário
+    `ats` (superuser local) bypassa RLS e os testes de isolamento de tenant
+    via TestClient sempre passam mesmo com bug. Em prod a API conecta como
+    `uphiring_app` (não superuser) e essa override é desnecessária.
     """
     factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     monkeypatch.setattr("src.db.session.engine", db_engine)
     monkeypatch.setattr("src.db.session.AsyncSessionLocal", factory)
     monkeypatch.setattr("src.middleware.clerk.AsyncSessionLocal", factory)
     monkeypatch.setattr("src.services.webhook_handlers.AsyncSessionLocal", factory)
+
+    from src.db.session import current_tenant_id, get_db
+    from src.main import app
+
+    async def _test_get_db():
+        async with factory() as session:
+            await session.execute(text("SET LOCAL ROLE uphiring_app"))
+            tenant_id = current_tenant_id.get()
+            if tenant_id is not None:
+                await session.execute(
+                    text(f"SET LOCAL app.current_tenant_id = '{tenant_id}'")
+                )
+            try:
+                yield session
+            finally:
+                await session.close()
+
+    app.dependency_overrides[get_db] = _test_get_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
