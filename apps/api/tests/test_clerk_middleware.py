@@ -1,9 +1,22 @@
-"""Issue #24: ClerkAuthMiddleware must return JSON 401, not surface as 500."""
+"""Issue #24: ClerkAuthMiddleware must return JSON 401, not surface as 500.
+
+Strict RS256 signature tests live in #40 — the cases here exercise the
+non-cryptographic branches (missing/malformed token, missing claims) and
+use the `clerk_skip_verify` debug flag so HS256 forged tokens reach the
+claims-handling code without going through JWKS.
+"""
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jose import jwt
 
+from src.config import settings
 from src.middleware.clerk import ClerkAuthMiddleware
+
+
+@pytest.fixture
+def skip_verify(monkeypatch):
+    monkeypatch.setattr(settings, "clerk_skip_verify", True)
 
 
 def _client() -> TestClient:
@@ -39,16 +52,14 @@ def test_malformed_token_returns_401() -> None:
     assert r.json() == {"detail": "Invalid token"}
 
 
-def test_token_without_sub_returns_401() -> None:
-    # jwt.get_unverified_claims doesn't check signature, so any well-formed JWT
-    # decodes. We construct one with no 'sub' to hit the "Missing user" branch.
+def test_token_without_sub_returns_401(skip_verify) -> None:
     token = jwt.encode({"foo": "bar"}, "irrelevant-secret", algorithm="HS256")
     r = _client().get("/api/v1/jobs", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
     assert r.json() == {"detail": "Missing user"}
 
 
-def test_valid_token_passes_through() -> None:
+def test_valid_token_passes_through(skip_verify) -> None:
     token = jwt.encode({"sub": "user_abc", "org_id": "org_xyz"}, "secret", algorithm="HS256")
     r = _client().get("/api/v1/jobs", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200

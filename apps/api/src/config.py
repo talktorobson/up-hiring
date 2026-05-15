@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     clerk_publishable_key: str = Field(default="")
     clerk_secret_key: str = Field(default="")
     clerk_webhook_secret: str = Field(default="")
+    clerk_jwks_url: str = Field(default="https://api.clerk.com/v1/jwks")
+    # Validado se setado. Sessões Clerk padrão não trazem aud — em prod, se o
+    # template de JWT incluir aud, fixar aqui.
+    clerk_audience: str | None = Field(default=None)
+    # Issuer esperado no claim `iss`. Validado se setado.
+    clerk_issuer: str | None = Field(default=None)
+    # Apenas pra DEBUG / testes locais. Nunca True em prod.
+    clerk_skip_verify: bool = Field(default=False)
 
     # S3
     s3_endpoint: str | None = Field(default=None)
