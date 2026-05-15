@@ -73,6 +73,14 @@ make dev-web     # next dev :3000
 
 - **`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` = `CLERK_PUBLISHABLE_KEY`** — é a mesma chave nas duas vars (uma é exposta ao client via Next, outra ao server). Discrepância quebra `<ClerkProvider>` no frontend.
 
+- **Usuário `ats` local é SUPERUSER + BYPASSRLS** — em testes que sobem o app via `TestClient` + FastAPI DI, as policies passam batido e qualquer asserção de isolamento entre tenants vira false-positive. Fix em `apps/api/tests/conftest.py:patch_db_session_module`: override de `app.dependency_overrides[get_db]` que faz `SET LOCAL ROLE uphiring_app` por request. Prod conecta direto como `uphiring_app` (não superuser), então não precisa do override. Testes SQL-level (`tests/test_rls.py`, `tests/test_rls_domain.py`) já usam o fixture `app_role_session` (PR #71 / Sprint 3 #59).
+
+- **`model_validate(obj)` depois de `session.commit()` em rota async** — colunas com `onupdate=func.now()` ficam stale em memória; o acesso ao atributo dispara lazy-load, e como estamos fora do greenlet do SQLAlchemy o erro é `MissingGreenlet: greenlet_spawn has not been called`. Fix: `await session.refresh(obj, ["updated_at"])` antes do commit, em qualquer PATCH/UPDATE. Aplicado em `update_job`, `update_candidate`, `move_application_stage` (PRs #73, #76 / Sprint 3 #61, #64).
+
+- **pytest-cov perde frames async dentro de rota** — SQLAlchemy 2 usa greenlet pra bridge async/sync. Sem `concurrency = ["thread", "greenlet"]` em `[tool.coverage.run]` do `pyproject.toml`, todas as rotas async parecem 50% cobertas mesmo com teste passando. Adicionar ao criar qualquer projeto novo com pytest-cov + SQLAlchemy async (PR #76 / Sprint 3 #64).
+
+- **SAEnum + StrEnum sem `values_callable`** — `sa.Enum(MyEnum, name="...")` por padrão grava `member.name` (UPPERCASE) no Postgres, não `member.value` (lowercase). Resultado: `WHERE status = 'open'` via SQL cru retorna zero rows porque o tipo PG tem o label `'OPEN'`. Sempre passar `values_callable=enum_values` (helper em `src/models/enums.py`). Vale pra todos os SAEnum do projeto (PR #66 / Sprint 3 #54).
+
 ## Git / repo
 
 - `main` é protegida: PR obrigatório, status checks `api` + `web` exigidos, linear history, force-push e delete bloqueados. Owner pode `gh pr merge --admin` em casos extremos (review automática de bot deixa o PR `BLOCKED` mesmo com tudo verde).
@@ -107,6 +115,10 @@ make dev-web     # next dev :3000
 - `git add -A` sem checar `.env.*` antes
 - `gh pr merge` sem `--admin` quando o bot review automática deixou o PR `BLOCKED`
 - Adicionar `NEXT_PUBLIC_*` no Vercel sem listar em `turbo.json[build].env`
+- Confiar em teste RLS via `TestClient` rodando como `ats` (superuser bypassa policies) → override `get_db` para `SET LOCAL ROLE uphiring_app`
+- `model_validate` depois de `commit()` em rota async com `onupdate` → MissingGreenlet (use `session.refresh(["updated_at"])` antes)
+- pytest-cov reportando ~50% em rotas async → falta `concurrency = ["thread", "greenlet"]` em `[tool.coverage.run]`
+- `sa.Enum(StrEnum, name=...)` sem `values_callable` → labels Postgres ficam UPPERCASE em vez de lowercase
 
 ## Arquivos-chave (referência rápida)
 
@@ -114,14 +126,31 @@ make dev-web     # next dev :3000
 apps/api/
   src/db/url.py              # ensure_async_driver()
   src/db/session.py          # engine + current_tenant_id ContextVar
-  src/db/rls.py              # policies (placeholder por enquanto)
+  src/db/base.py             # Base, TenantScopedMixin, TimestampMixin, SoftDeleteMixin
+  src/db/rls.py              # enable_rls_sql() + policies helpers
   src/middleware/clerk.py    # _unauthorized(), PUBLIC_PATHS, JWT decode
+  src/models/enums.py        # StrEnums + enum_values helper (values_callable)
+  src/models/{job,stage,candidate,application,activity}.py
+  src/services/job.py        # JobService.create + 7-stage atomic seed
+  src/services/candidate.py  # CPF/email dedup, InvalidCPFError, DuplicateCandidateError
+  src/services/application.py # move_stage + ApplicationDomainError
+  src/services/activity.py   # ActivityService.log (same-txn write)
+  src/services/stage_defaults.py # DEFAULT_STAGES (Sourced..Rejected)
+  src/utils/cpf.py           # normalize() + is_valid() (DV algorithm)
+  src/utils/pagination.py    # keyset cursor + paginate()
+  src/api/v1/_deps.py        # require_tenant + get_actor_user_id
   src/api/v1/__init__.py     # registry de routers
-  src/api/v1/webhooks.py     # placeholder Clerk webhook (svix verify)
+  src/api/v1/jobs.py         # CRUD + /jobs/{id}/pipeline
+  src/api/v1/candidates.py   # CRUD + ilike search
+  src/api/v1/applications.py # CRUD + PATCH /{id}/stage
+  src/api/v1/webhooks_clerk.py # Clerk webhook (svix verify)
   fly.toml                   # release_command, region gru, auto_stop
   Dockerfile                 # uv-based build
   alembic/env.py             # usa ensure_async_driver
-  tests/test_clerk_middleware.py
+  tests/conftest.py          # patch_db_session_module (SET LOCAL ROLE uphiring_app)
+  tests/test_rls.py          # RLS isolation: tenant/membership
+  tests/test_rls_domain.py   # RLS isolation: job/stage/candidate/application/activity
+  tests/test_{jobs,candidates,applications,pipeline}_api.py
 
 apps/web/
   middleware.ts              # clerkMiddleware()
