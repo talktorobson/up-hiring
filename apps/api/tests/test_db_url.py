@@ -1,4 +1,4 @@
-from src.db.session import _ensure_async_driver
+from src.db.url import ensure_async_driver as _ensure_async_driver
 
 
 def test_bare_postgresql_gets_asyncpg() -> None:
