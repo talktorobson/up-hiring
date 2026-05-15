@@ -2,34 +2,20 @@
 
 Endpoint público (entra em `PUBLIC_PATHS` do `ClerkAuthMiddleware`); a
 segurança vem do header `svix-signature` validado contra o `webhook_secret`
-do Clerk Dashboard. Handlers reais ficam em `src.services.webhook_handlers`
-(issue #36) — aqui o dispatcher só registra o evento e devolve 200.
+do Clerk Dashboard. Handlers ficam em `src.services.webhook_handlers` —
+o dispatcher consulta o dict `HANDLERS` exposto por aquele módulo.
 """
 import logging
-from collections.abc import Awaitable, Callable
 
 import sentry_sdk
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from svix.webhooks import Webhook, WebhookVerificationError
 
 from src.config import settings
+from src.services.webhook_handlers import HANDLERS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-# Tipos suportados pelo Clerk que vamos materializar. Tudo fora dessa lista é
-# logado mas devolve 200 (Clerk não retenta se receber 2xx).
-HandlerFn = Callable[[dict], Awaitable[None]]
-_HANDLERS: dict[str, HandlerFn] = {}
-
-
-def register_handler(event_type: str) -> Callable[[HandlerFn], HandlerFn]:
-    def decorator(fn: HandlerFn) -> HandlerFn:
-        _HANDLERS[event_type] = fn
-        return fn
-
-    return decorator
 
 
 @router.post("/clerk")
@@ -80,7 +66,7 @@ async def clerk_webhook(
 
     logger.info("clerk webhook: type=%s id=%s svix_id=%s", event_type, object_id, svix_id)
 
-    handler = _HANDLERS.get(event_type)
+    handler = HANDLERS.get(event_type)
     if handler is None:
         logger.info("no handler for clerk event type=%s", event_type)
         return {"received": True, "dispatched": False, "type": event_type}
