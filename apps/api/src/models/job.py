@@ -1,10 +1,11 @@
 """Job."""
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.base import Base, SoftDeleteMixin, TenantScopedMixin, TimestampMixin, new_uuid
 from src.models.enums import (
@@ -14,6 +15,9 @@ from src.models.enums import (
     JobStatus,
     enum_values,
 )
+
+if TYPE_CHECKING:
+    from src.models.stage import Stage
 
 
 class Job(Base, TenantScopedMixin, TimestampMixin, SoftDeleteMixin):
@@ -56,4 +60,12 @@ class Job(Base, TenantScopedMixin, TimestampMixin, SoftDeleteMixin):
     )
     created_by: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("app_user.id"), nullable=True
+    )
+
+    stages: Mapped[list["Stage"]] = relationship(
+        "Stage",
+        primaryjoin="Job.id == Stage.job_id",
+        order_by="Stage.position",
+        cascade="all, delete-orphan",
+        lazy="raise",
     )
