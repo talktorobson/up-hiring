@@ -23,7 +23,9 @@ services:
       - redis_data:/data
 
   localstack:
-    image: localstack/localstack:latest
+    # Pinned to v3 community: 'latest' now resolves to a paywalled build that
+    # exits 55 without LOCALSTACK_AUTH_TOKEN. v3 still ships free S3.
+    image: localstack/localstack:3
     ports:
       - "4566:4566"
     environment:
