@@ -9,6 +9,9 @@ primary_region = 'gru'
 [build]
   dockerfile = 'Dockerfile'
 
+[deploy]
+  release_command = 'uv run alembic upgrade head'
+
 [env]
   APP_ENV = 'production'
   LOG_LEVEL = 'INFO'
