@@ -63,6 +63,12 @@ markers = [
     "rls: testes de Row Level Security (rodam contra Postgres real)",
 ]
 
+[tool.coverage.run]
+# SQLAlchemy 2 usa greenlet pra ponte async/sync. Sem isso coverage perde
+# o frame dos handlers de rota async chamados via TestClient/FastAPI DI.
+concurrency = ["thread", "greenlet"]
+source = ["src"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

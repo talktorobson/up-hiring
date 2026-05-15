@@ -1,4 +1,4 @@
-"""Smoke wire-check do /api/v1/jobs/{id}/pipeline."""
+"""Cobertura formal /api/v1/jobs/{id}/pipeline — stages active + top 20 + counts."""
 from __future__ import annotations
 
 import httpx

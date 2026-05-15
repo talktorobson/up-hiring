@@ -144,6 +144,9 @@ async def update_job(
             actor_user_id=actor_user_id,
             payload=diff,
         )
+    # Captura updated_at do server (onupdate=func.now) antes do commit,
+    # senão acesso depois do commit dispara lazy load em contexto async/sync.
+    await session.refresh(job, ["updated_at"])
     await session.commit()
     return JobRead.model_validate(job)
 
