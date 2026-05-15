@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base, TenantScopedMixin, new_uuid
-from src.models.enums import ACTIVITY_ENTITY_TYPE_ENUM_NAME, ActivityEntityType
+from src.models.enums import ACTIVITY_ENTITY_TYPE_ENUM_NAME, ActivityEntityType, enum_values
 
 
 class Activity(Base, TenantScopedMixin):
@@ -31,6 +31,7 @@ class Activity(Base, TenantScopedMixin):
             ActivityEntityType,
             name=ACTIVITY_ENTITY_TYPE_ENUM_NAME,
             native_enum=True,
+            values_callable=enum_values,
         ),
         nullable=False,
     )

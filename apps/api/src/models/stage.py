@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base, TenantScopedMixin, new_uuid
-from src.models.enums import STAGE_KIND_ENUM_NAME, StageKind
+from src.models.enums import STAGE_KIND_ENUM_NAME, StageKind, enum_values
 
 
 class Stage(Base, TenantScopedMixin):
@@ -25,7 +25,12 @@ class Stage(Base, TenantScopedMixin):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     kind: Mapped[StageKind] = mapped_column(
-        SAEnum(StageKind, name=STAGE_KIND_ENUM_NAME, native_enum=True),
+        SAEnum(
+            StageKind,
+            name=STAGE_KIND_ENUM_NAME,
+            native_enum=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
         default=StageKind.ACTIVE,
     )

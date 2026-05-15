@@ -12,6 +12,7 @@ from src.models.enums import (
     JOB_STATUS_ENUM_NAME,
     EmploymentType,
     JobStatus,
+    enum_values,
 )
 
 
@@ -32,14 +33,24 @@ class Job(Base, TenantScopedMixin, TimestampMixin, SoftDeleteMixin):
     description: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(String(255))
     employment_type: Mapped[EmploymentType] = mapped_column(
-        SAEnum(EmploymentType, name=EMPLOYMENT_TYPE_ENUM_NAME, native_enum=True),
+        SAEnum(
+            EmploymentType,
+            name=EMPLOYMENT_TYPE_ENUM_NAME,
+            native_enum=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
         default=EmploymentType.CLT,
     )
     salary_min: Mapped[int | None] = mapped_column(Integer)
     salary_max: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[JobStatus] = mapped_column(
-        SAEnum(JobStatus, name=JOB_STATUS_ENUM_NAME, native_enum=True),
+        SAEnum(
+            JobStatus,
+            name=JOB_STATUS_ENUM_NAME,
+            native_enum=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
         default=JobStatus.DRAFT,
     )
