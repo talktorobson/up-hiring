@@ -59,8 +59,10 @@ def test_token_without_sub_returns_401(skip_verify) -> None:
     assert r.json() == {"detail": "Missing user"}
 
 
-def test_valid_token_passes_through(skip_verify) -> None:
-    token = jwt.encode({"sub": "user_abc", "org_id": "org_xyz"}, "secret", algorithm="HS256")
+def test_valid_token_without_org_passes_through(skip_verify) -> None:
+    # Sem org_id o middleware não tenta resolver tenant; apenas passa adiante.
+    # O endpoint individual decide se exige org via request.state.tenant_id.
+    token = jwt.encode({"sub": "user_abc"}, "secret", algorithm="HS256")
     r = _client().get("/api/v1/jobs", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert r.json() == {"jobs": "would-be-listed"}

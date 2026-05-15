@@ -1,13 +1,15 @@
 """Middleware de autenticação Clerk.
 
 Valida JWT do Clerk presente no header Authorization, extrai user_id e org_id,
-injeta no contexto da request (e no ContextVar de tenant para a sessão DB usar
-RLS).
+resolve `tenant_id` no banco (cacheado em Redis) e injeta no contexto da
+request — incluindo o ContextVar de tenant que `get_db` usa pra `SET LOCAL
+app.current_tenant_id` (RLS).
 
-Endpoints públicos passam livremente. Demais exigem token válido.
+Endpoints públicos passam livremente. Demais exigem token válido. Endpoints
+tenant-scoped que precisem de tenant devem checar `request.state.tenant_id`
+e devolver 400 `org_required` se for None.
 """
 import logging
-from uuid import UUID
 
 import sentry_sdk
 from fastapi import Request, status
@@ -16,8 +18,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from src.config import settings
-from src.db.session import current_tenant_id
+from src.db.session import AsyncSessionLocal, current_tenant_id
 from src.middleware.jwks import get_jwks_client
+from src.services.tenant import resolve_tenant_id_cached
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,10 @@ def _unauthorized(detail: str) -> JSONResponse:
     # does not route exceptions through FastAPI's exception handlers, so a raise
     # would leak as a generic 500. See issue #24.
     return JSONResponse({"detail": detail}, status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+def _forbidden(detail: str) -> JSONResponse:
+    return JSONResponse({"detail": detail}, status_code=status.HTTP_403_FORBIDDEN)
 
 
 def _breadcrumb(message: str, **data: object) -> None:
@@ -91,14 +98,23 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
 
         request.state.user_id = user_id
         request.state.org_id = org_id
+        request.state.tenant_id = None
 
-        # TODO(#33): substituir pelo lookup real em src/services/tenant.py.
         if org_id:
             try:
-                token_tenant = UUID(org_id) if len(org_id) == 36 else None
-                if token_tenant:
-                    current_tenant_id.set(token_tenant)
-            except ValueError:
-                pass
+                tenant_id = await resolve_tenant_id_cached(AsyncSessionLocal, org_id)
+            except Exception as exc:
+                # Falhas de Redis caem dentro do helper; aqui pegamos só DB
+                # down/permission. Sem este except o BaseHTTPMiddleware vaza 500.
+                logger.exception("tenant resolve failed for org_id=%s", org_id)
+                _breadcrumb("tenant resolve failed", error=exc.__class__.__name__)
+                return _forbidden("tenant_resolve_failed")
+
+            if tenant_id is None:
+                _breadcrumb("tenant_not_provisioned", org_id=org_id)
+                return _forbidden("tenant_not_provisioned")
+
+            request.state.tenant_id = tenant_id
+            current_tenant_id.set(tenant_id)
 
         return await call_next(request)
