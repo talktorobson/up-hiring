@@ -1,0 +1,106 @@
+name: E2E
+
+on:
+  pull_request:
+    branches: [main]
+
+# Não é required na branch protection — vira gate quando os secrets de
+# Clerk E2E estiverem configurados (ver RUNBOOK). Sem eles, faz skip limpo.
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          E2E_USER_A_EMAIL: ${{ secrets.E2E_USER_A_EMAIL }}
+        run: |
+          if [ -n "$E2E_USER_A_EMAIL" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Clerk E2E secrets ausentes — E2E sera pulado (ver RUNBOOK)."
+          fi
+
+  e2e:
+    needs: gate
+    if: needs.gate.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ats
+          POSTGRES_PASSWORD: ats
+          POSTGRES_DB: ats
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://ats:ats@localhost:5432/ats
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+      E2E_USER_A_EMAIL: ${{ secrets.E2E_USER_A_EMAIL }}
+      E2E_USER_A_PASSWORD: ${{ secrets.E2E_USER_A_PASSWORD }}
+      E2E_USER_B_EMAIL: ${{ secrets.E2E_USER_B_EMAIL }}
+      E2E_USER_B_PASSWORD: ${{ secrets.E2E_USER_B_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: API deps + migrate + seed
+        working-directory: apps/api
+        run: |
+          uv sync
+          uv run alembic upgrade head
+          uv run python -m src.scripts.seed --reset
+
+      - name: Start API
+        working-directory: apps/api
+        run: |
+          uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && break || sleep 1
+          done
+
+      - name: Build and start web
+        run: |
+          pnpm --filter web build
+          pnpm --filter web start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000 && break || sleep 1
+          done
+
+      - name: Install Playwright browser
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Run happy path
+        run: pnpm --filter web e2e

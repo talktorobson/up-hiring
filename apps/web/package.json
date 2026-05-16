@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "echo \"no tests yet\""
+    "test": "echo \"no tests yet\"",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@clerk/localizations": "^3.9.0",
@@ -53,6 +54,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@clerk/testing": "^1.4.0",
+    "@playwright/test": "^1.49.0",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
