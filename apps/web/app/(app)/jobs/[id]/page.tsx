@@ -1,15 +1,15 @@
 "use client";
 
 import DOMPurify from "isomorphic-dompurify";
-import { toast } from "sonner";
+import { useSearchParams } from "next/navigation";
 
+import { AddCandidateDialog } from "@/components/applications/add-candidate-dialog";
 import { JobActions } from "@/components/jobs/job-actions";
-import { KanbanBoard } from "@/components/kanban/board";
 import {
   employmentLabel,
   StatusBadge,
 } from "@/components/jobs/status-badge";
-import { Button } from "@/components/ui/button";
+import { KanbanBoard } from "@/components/kanban/board";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useJob } from "@/lib/hooks";
@@ -21,6 +21,9 @@ export default function JobDetailPage({
   params: { id: string };
 }) {
   const { data: job, isLoading, isError } = useJob(params.id);
+  const searchParams = useSearchParams();
+  const defaultTab =
+    searchParams.get("tab") === "pipeline" ? "pipeline" : "sobre";
 
   if (isLoading) {
     return (
@@ -66,18 +69,12 @@ export default function JobDetailPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            onClick={() =>
-              toast.info("Adicionar candidato chega no PR5 (#85).")
-            }
-          >
-            Adicionar candidato
-          </Button>
+          <AddCandidateDialog jobId={job.id} />
           <JobActions job={job} />
         </div>
       </div>
 
-      <Tabs defaultValue="sobre">
+      <Tabs defaultValue={defaultTab}>
         <TabsList>
           <TabsTrigger value="sobre">Sobre</TabsTrigger>
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
