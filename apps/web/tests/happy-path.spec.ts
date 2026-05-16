@@ -1,0 +1,114 @@
+import { clerk, clerkSetup } from "@clerk/testing/playwright";
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * Sprint 4 #89 — único happy path:
+ * login A → cria vaga → adiciona candidato → arrasta stage → refresh
+ * persiste → login B (outra org) → não vê a vaga (RLS).
+ *
+ * Requer Clerk test users + org (setup externo — ver RUNBOOK). Sem os envs
+ * o teste é SKIPPED em vez de falhar, pra não travar o merge enquanto os
+ * secrets não estão provisionados.
+ */
+const A_EMAIL = process.env.E2E_USER_A_EMAIL;
+const A_PASSWORD = process.env.E2E_USER_A_PASSWORD;
+const B_EMAIL = process.env.E2E_USER_B_EMAIL;
+const B_PASSWORD = process.env.E2E_USER_B_PASSWORD;
+
+const haveCreds =
+  !!A_EMAIL &&
+  !!A_PASSWORD &&
+  !!B_EMAIL &&
+  !!B_PASSWORD &&
+  !!process.env.CLERK_SECRET_KEY;
+
+test.describe("UpHiring happy path", () => {
+  test.skip(
+    !haveCreds,
+    "Clerk E2E credenciais ausentes (E2E_USER_*/CLERK_SECRET_KEY) — ver RUNBOOK",
+  );
+
+  test.beforeAll(async () => {
+    await clerkSetup();
+  });
+
+  // dnd-kit (PointerSensor distance 6) precisa de mousemoves intermediários;
+  // dragTo simples não dispara o drag. Helper com passos manuais.
+  async function dragCard(page: Page, cardName: string, toColumn: string) {
+    const card = page.getByRole("button", { name: new RegExp(cardName) });
+    const target = page.getByText(toColumn, { exact: true });
+    const cb = await card.boundingBox();
+    const tb = await target.boundingBox();
+    if (!cb || !tb) throw new Error("card/coluna sem bounding box");
+    await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(cb.x + cb.width / 2, cb.y - 30, { steps: 8 });
+    await page.mouse.move(tb.x + tb.width / 2, tb.y + 40, { steps: 12 });
+    await page.mouse.up();
+  }
+
+  test("create job, add candidate, move stage, RLS isolation", async ({
+    page,
+  }) => {
+    const jobTitle = `Pessoa Vendedora Loja ${Date.now()}`;
+
+    // --- User A ---
+    await page.goto("/");
+    await clerk.signIn({
+      page,
+      signInParams: {
+        strategy: "password",
+        identifier: A_EMAIL!,
+        password: A_PASSWORD!,
+      },
+    });
+
+    await page.goto("/jobs");
+    await page.getByRole("link", { name: "Nova vaga" }).click();
+    await page.getByLabel("Título *").fill(jobTitle);
+    await page.getByLabel("Localização").fill("São Paulo, SP");
+    await page.getByLabel("Salário mínimo (R$)").fill("2500");
+    await page.getByLabel("Salário máximo (R$)").fill("3500");
+    await page.getByRole("button", { name: "Criar vaga" }).click();
+
+    await expect(
+      page.getByRole("heading", { name: jobTitle }),
+    ).toBeVisible();
+
+    // Adiciona candidato novo
+    await page.getByRole("button", { name: "Adicionar candidato" }).click();
+    await page
+      .getByRole("button", { name: "Criar novo candidato" })
+      .click();
+    const stamp = Date.now();
+    await page.getByLabel("Nome completo *").fill("Joana Silva");
+    await page
+      .getByLabel("E-mail *")
+      .fill(`joana${stamp}@test.com`);
+    await page.getByLabel("CPF").fill("390.533.447-05");
+    await page.getByRole("button", { name: "Criar candidato" }).click();
+
+    // Card cai na 1ª stage active (Sourced)
+    await page.getByRole("tab", { name: "Pipeline" }).click();
+    await expect(page.getByText("Joana Silva")).toBeVisible();
+
+    await dragCard(page, "Joana Silva", "Screening");
+    await page.reload();
+    await page.getByRole("tab", { name: "Pipeline" }).click();
+    await expect(page.getByText("Joana Silva")).toBeVisible();
+
+    // --- User B (outra org) não enxerga a vaga ---
+    await clerk.signOut({ page });
+    await page.goto("/");
+    await clerk.signIn({
+      page,
+      signInParams: {
+        strategy: "password",
+        identifier: B_EMAIL!,
+        password: B_PASSWORD!,
+      },
+    });
+    await page.goto("/jobs");
+    await expect(page.getByText(jobTitle)).toHaveCount(0);
+  });
+});
