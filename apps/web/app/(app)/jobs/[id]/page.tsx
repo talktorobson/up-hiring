@@ -4,6 +4,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { toast } from "sonner";
 
 import { JobActions } from "@/components/jobs/job-actions";
+import { KanbanBoard } from "@/components/kanban/board";
 import {
   employmentLabel,
   StatusBadge,
@@ -95,10 +96,7 @@ export default function JobDetailPage({
         </TabsContent>
 
         <TabsContent value="pipeline" className="pt-4">
-          <div className="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
-            Kanban do pipeline chega no PR4 (#84). Stages já vêm da API:{" "}
-            {job.stages.length} configurados.
-          </div>
+          <KanbanBoard jobId={job.id} />
         </TabsContent>
 
         <TabsContent value="atividade" className="pt-4">
