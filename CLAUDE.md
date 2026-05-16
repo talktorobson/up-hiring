@@ -28,14 +28,22 @@ Pré-requisitos: `brew`, `node 20+`, `pnpm 9`, `uv`, `git`, mais:
 ```sh
 brew install colima docker docker-compose
 colima start --cpu 2 --memory 4 --disk 30
-# Colima cria o contexto docker automaticamente.
-# Confirme: `docker info | head -3` deve mostrar "Server Version".
+# ⚠️ Colima NEM SEMPRE cria/aponta o contexto docker (já mordeu — Sprint 4
+# Phase C). Se `docker info` não mostrar "Server Version", crie o contexto
+# apontando pro socket do Colima e selecione:
+docker context create colima \
+  --docker "host=unix://$HOME/.colima/default/docker.sock"
+docker context use colima
+docker info | grep "Server Version"   # tem que aparecer
 ```
 
-Se `docker compose` reclamar de plugin não encontrado, garanta que `~/.docker/config.json` tem:
+Se `docker compose` reclamar de plugin não encontrado (`Run 'docker --help'…`),
+o plugin do brew existe mas não está registrado — adicione ao
+`~/.docker/config.json` (preservando `auths`/`currentContext`):
 ```json
 { "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"] }
 ```
+Confirme: `docker compose version` deve responder.
 
 Loop completo (sub-4min com Colima já rodando, sub-15min from-scratch — validado em #12):
 
@@ -98,6 +106,8 @@ make dev-web     # next dev :3000
 
 - **`make seed` → `python -m src.scripts.seed`** — o target do Makefile já apontava pra esse módulo (não `scripts/seed_demo.py`). Scripts CLI usam `print`, e o ruff tem `T20` no `select`; precisa `per-file-ignores` `"src/scripts/*" = ["T201"]` no `pyproject.toml` senão `ruff check .` (job `api`) reprova (PR #96 / Sprint 4 #88).
 
+- **`pnpm install` depois de TODO `git pull`** — os targets do `Makefile` (`make dev-web` etc.) **não** rodam install. Pull com deps novas + `make dev-web` direto → `tailwind.config.ts` faz `require("tailwindcss-animate")`, o require falha, o Tailwind perde o tema inteiro e `next dev` morre com `The 'border-border' class does not exist` (erro enganoso — parece CSS, é dep faltando). CI/Vercel nunca veem porque sempre `pnpm install --frozen-lockfile` antes. Regra: `git pull` → `pnpm install` → `rm -rf apps/web/.next` se já tinha rodado o dev (Sprint 4 Phase C).
+
 ## Git / repo
 
 - `main` é protegida: PR obrigatório, status checks `api` + `web` exigidos, linear history, force-push e delete bloqueados. Owner pode `gh pr merge --admin` em casos extremos (review automática de bot deixa o PR `BLOCKED` mesmo com tudo verde).
@@ -148,6 +158,8 @@ make dev-web     # next dev :3000
 - Pôr `/select-org` dentro de `app/(app)/` → loop de redirect
 - Spec Playwright fora de `tsconfig[exclude]` → reprova o build `web`
 - `print` em `src/scripts/*` sem `per-file-ignores T201` → ruff reprova job `api`
+- `make dev-web` depois de `git pull` sem `pnpm install` → erro falso `border-border class does not exist`
+- Assumir que `colima start` criou o contexto docker → `docker info` sem "Server Version" (crie `docker context create colima`)
 
 ## Arquivos-chave (referência rápida)
 
