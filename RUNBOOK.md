@@ -12,6 +12,12 @@ Desktop — ver `CLAUDE.md`).
 git clone https://github.com/talktorobson/up-hiring && cd up-hiring
 cp .env.example .env            # ajuste Clerk/Sentry/Logfire (ver §3)
 colima start --cpu 2 --memory 4 --disk 30
+# Colima nem sempre cria/aponta o contexto docker:
+docker info | grep -q "Server Version" || {
+  docker context create colima --docker "host=unix://$HOME/.colima/default/docker.sock"
+  docker context use colima
+}
+# `docker compose` sem plugin? ver CLAUDE.md (cliPluginsExtraDirs)
 pnpm install --frozen-lockfile
 cd apps/api && uv sync && cd ../..
 make dev-up        # postgres :5432 + redis :6379 + localstack :4566
@@ -21,8 +27,14 @@ make dev-api       # uvicorn :8000
 make dev-web       # next :3000
 ```
 
+> **Após CADA `git pull`: `pnpm install` antes de qualquer `make dev-*`.**
+> Os targets do Makefile não rodam install; deps faltando fazem o
+> `next dev` morrer com o erro enganoso `The 'border-border' class does
+> not exist`. Se já tinha rodado o dev: `rm -rf apps/web/.next` também.
+
 Smoke: `curl localhost:8000/health` → `{"status":"ok"}`; `localhost:3000`
-mostra a landing com botão "Entrar".
+mostra a landing com botão "Entrar". Seed esperado: 2 tenants · 10 jobs ·
+70 stages · 60 candidatos · 100 applications.
 
 ## 2. Comandos
 
