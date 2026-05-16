@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Providers } from "@/components/providers";
+import { Telemetry } from "@/components/telemetry";
 
 export default async function AppLayout({
   children,
@@ -18,6 +19,7 @@ export default async function AppLayout({
 
   return (
     <Providers>
+      <Telemetry />
       <AppShell>{children}</AppShell>
     </Providers>
   );

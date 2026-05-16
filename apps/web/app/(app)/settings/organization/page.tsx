@@ -2,6 +2,7 @@
 
 import { OrganizationProfile } from "@clerk/nextjs";
 
+import { SentryTestButton } from "@/components/sentry-test-button";
 import { CardSkeleton } from "@/components/skeletons";
 import {
   Card,
@@ -44,6 +45,20 @@ export default function OrganizationSettingsPage() {
         routing="hash"
         appearance={{ elements: { rootBox: "w-full" } }}
       />
+
+      {process.env.NODE_ENV === "development" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Dev tools</CardTitle>
+            <CardDescription>
+              Só aparece em desenvolvimento.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SentryTestButton />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

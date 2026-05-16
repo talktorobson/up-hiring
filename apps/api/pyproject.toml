@@ -43,6 +43,10 @@ target-version = "py312"
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "T20", "RET", "SIM", "TCH"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# Scripts de CLI usam print pra output ao operador — T20 não se aplica.
+"src/scripts/*" = ["T201"]
+
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
     "fastapi.Depends",
