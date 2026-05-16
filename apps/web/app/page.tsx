@@ -30,10 +30,10 @@ export default function Home() {
 
         <SignedIn>
           <a
-            href="/dashboard"
+            href="/jobs"
             className="inline-block px-6 py-3 bg-brand-500 text-white rounded-md hover:bg-brand-700"
           >
-            Abrir dashboard
+            Abrir app
           </a>
         </SignedIn>
       </section>

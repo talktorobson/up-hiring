@@ -79,3 +79,6 @@ jobs:
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuaW5jbHVkZWQua2F0eWRpZC05Mi5sY2wuZGV2JA
           CLERK_SECRET_KEY: sk_test_ci_build_placeholder
+          NEXT_PUBLIC_API_URL: https://up-hiring-api.fly.dev
+          NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+          NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
