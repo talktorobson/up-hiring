@@ -4,9 +4,10 @@ import { Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/empty-state";
+import { TableSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -53,25 +54,17 @@ export default function CandidatesPage() {
       />
 
       {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
+        <TableSkeleton rows={5} />
       ) : isError ? (
         <p className="text-sm text-destructive">
           Não foi possível carregar os candidatos.
         </p>
       ) : candidates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
-          <Users className="mb-3 h-10 w-10 text-slate-300" />
-          <p className="text-sm font-medium">
-            {q ? "Nenhum candidato encontrado." : "Nenhum candidato ainda."}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Candidatos são criados ao adicioná-los a uma vaga.
-          </p>
-        </div>
+        <EmptyState
+          icon={Users}
+          title={q ? "Nenhum candidato encontrado." : "Nenhum candidato ainda."}
+          description="Candidatos são criados ao adicioná-los a uma vaga."
+        />
       ) : (
         <>
           <div className="rounded-lg border">
