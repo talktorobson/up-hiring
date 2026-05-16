@@ -22,6 +22,7 @@ import type {
 import { useApiClient } from "./use-api-client";
 
 export const qk = {
+  me: () => ["me"] as const,
   jobs: (params?: JobListParams) => ["jobs", params ?? {}] as const,
   job: (id: string) => ["job", id] as const,
   pipeline: (jobId: string) => ["pipeline", jobId] as const,
@@ -32,6 +33,11 @@ export const qk = {
     ["applications", params ?? {}] as const,
   application: (id: string) => ["application", id] as const,
 };
+
+export function useMe() {
+  const api = useApiClient();
+  return useQuery({ queryKey: qk.me(), queryFn: () => api.me() });
+}
 
 export function useJobsInfinite(status?: JobStatus, limit = 25) {
   const api = useApiClient();

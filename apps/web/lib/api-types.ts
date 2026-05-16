@@ -16,6 +16,22 @@ export interface Page<T> {
   has_more: boolean;
 }
 
+export interface MeResponse {
+  user: {
+    id: string;
+    clerk_user_id: string;
+    email: string;
+    full_name: string | null;
+  };
+  tenant: {
+    id: string;
+    clerk_org_id: string;
+    name: string;
+    slug: string;
+  };
+  role: string;
+}
+
 export interface StageRead {
   id: string;
   job_id: string;

@@ -15,6 +15,7 @@ import {
   type JobListParams,
   type JobRead,
   type JobUpdate,
+  type MeResponse,
   type Page,
   type PipelineRead,
 } from "./api-types";
@@ -66,6 +67,8 @@ export class ApiClient {
     }
     return body as T;
   }
+
+  me = () => this.request<MeResponse>("/me");
 
   jobs = {
     list: (params?: JobListParams) =>

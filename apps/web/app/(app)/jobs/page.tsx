@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { EmptyState } from "@/components/empty-state";
 import { employmentLabel, StatusBadge } from "@/components/jobs/status-badge";
+import { TableSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -14,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -73,26 +74,22 @@ export default function JobsPage() {
       </div>
 
       {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
+        <TableSkeleton rows={5} />
       ) : isError ? (
         <p className="text-sm text-destructive">
           Não foi possível carregar as vagas.
         </p>
       ) : jobs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
-          <Briefcase className="mb-3 h-10 w-10 text-slate-300" />
-          <p className="text-sm font-medium">Nenhuma vaga ainda.</p>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Crie sua primeira vaga para começar o pipeline.
-          </p>
-          <Button asChild>
-            <Link href="/jobs/new">Criar primeira vaga</Link>
-          </Button>
-        </div>
+        <EmptyState
+          icon={Briefcase}
+          title="Nenhuma vaga ainda."
+          description="Crie sua primeira vaga para começar o pipeline."
+          action={
+            <Button asChild>
+              <Link href="/jobs/new">Criar primeira vaga</Link>
+            </Button>
+          }
+        />
       ) : (
         <>
           <div className="rounded-lg border">
