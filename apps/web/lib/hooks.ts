@@ -30,6 +30,7 @@ export const qk = {
   candidate: (id: string) => ["candidate", id] as const,
   applications: (params?: ApplicationListParams) =>
     ["applications", params ?? {}] as const,
+  application: (id: string) => ["application", id] as const,
 };
 
 export function useJobsInfinite(status?: JobStatus, limit = 25) {
@@ -131,6 +132,15 @@ export function useApplications(params: ApplicationListParams) {
   return useQuery({
     queryKey: qk.applications(params),
     queryFn: () => api.applications.list(params),
+  });
+}
+
+export function useApplication(id: string, enabled = true) {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: qk.application(id),
+    queryFn: () => api.applications.get(id),
+    enabled: enabled && !!id,
   });
 }
 
