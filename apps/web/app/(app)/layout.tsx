@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
+import { AppShell } from "@/components/app-shell/app-shell";
 import { Providers } from "@/components/providers";
 
 export default async function AppLayout({
@@ -15,5 +16,9 @@ export default async function AppLayout({
   // deste grupo justamente pra não cair em loop de redirect.
   if (!orgId) redirect("/select-org");
 
-  return <Providers>{children}</Providers>;
+  return (
+    <Providers>
+      <AppShell>{children}</AppShell>
+    </Providers>
+  );
 }

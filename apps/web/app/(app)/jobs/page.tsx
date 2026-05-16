@@ -8,7 +8,7 @@ export default function JobsPage() {
   const jobs = data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
-    <main className="mx-auto max-w-5xl p-8">
+    <div className="mx-auto max-w-5xl p-8">
       <h1 className="mb-6 text-2xl font-bold tracking-tight">Vagas</h1>
       {isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
       {isError && (
@@ -26,6 +26,6 @@ export default function JobsPage() {
           </li>
         ))}
       </ul>
-    </main>
+    </div>
   );
 }
