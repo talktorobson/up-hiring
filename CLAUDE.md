@@ -108,6 +108,12 @@ make dev-web     # next dev :3000
 
 - **`pnpm install` depois de TODO `git pull`** — os targets do `Makefile` (`make dev-web` etc.) **não** rodam install. Pull com deps novas + `make dev-web` direto → `tailwind.config.ts` faz `require("tailwindcss-animate")`, o require falha, o Tailwind perde o tema inteiro e `next dev` morre com `The 'border-border' class does not exist` (erro enganoso — parece CSS, é dep faltando). CI/Vercel nunca veem porque sempre `pnpm install --frozen-lockfile` antes. Regra: `git pull` → `pnpm install` → `rm -rf apps/web/.next` se já tinha rodado o dev (Sprint 4 Phase C).
 
+- **`.next` debaixo do Google Drive corrompe** — o repo vive em `…/CloudStorage/GoogleDrive-…`. O sync do Drive briga com o file-watching + writes rápidos do Next; sintoma: `GET /_next/static/...` 404 (HTML serve 200, assets não), recorrente a cada poucos restarts. Next força `distDir` relativo ao projeto (`NEXT_DIST_DIR=/tmp/...` vira `apps/web/tmp/...`, ainda no Drive) — então a saída é **symlink**: `make dev-web` aponta `apps/web/.next` → `$HOME/.cache/up-hiring/next` (fora do Drive, override via `NEXT_CACHE`). CI/Vercel não rodam o target → `.next` é dir normal. Se voltar a 404: matar `next dev`, `rm -rf` o alvo do symlink, restart (Sprint 4 Phase C).
+
+- **Ordem de middleware no Starlette: CORS depois do auth** — `add_middleware` mais recente fica MAIS EXTERNO. Se `CORSMiddleware` for adicionado antes do `ClerkAuthMiddleware`, o auth envolve o CORS e dá 401 no preflight `OPTIONS` (sem `Authorization`) → browser vê "No 'Access-Control-Allow-Origin'". Adicionar `ClerkAuthMiddleware` PRIMEIRO e `CORSMiddleware` por último (outermost) pra ele responder o preflight antes do auth. Origins via `settings.cors_allow_origins` (CSV) + `cors_allow_origin_regex` pros previews Vercel (PR #100 / Sprint 4 Phase C).
+
+- **Token de sessão Clerk v2 traz a org em `o.id`, não `org_id` achatado** — o `org_id` plano só existe se um template de session token o adicionar. O default novo do Clerk põe a org ativa no claim compacto `o` (`o.id`). Middleware deve aceitar os dois: `claims.get("org_id") or claims.get("o",{}).get("id")`. Sem isso, todo endpoint tenant-scoped devolve 400 `org_required` mesmo logado numa org (PR #102 / Sprint 4 Phase C).
+
 ## Git / repo
 
 - `main` é protegida: PR obrigatório, status checks `api` + `web` exigidos, linear history, force-push e delete bloqueados. Owner pode `gh pr merge --admin` em casos extremos (review automática de bot deixa o PR `BLOCKED` mesmo com tudo verde).
@@ -160,6 +166,9 @@ make dev-web     # next dev :3000
 - `print` em `src/scripts/*` sem `per-file-ignores T201` → ruff reprova job `api`
 - `make dev-web` depois de `git pull` sem `pnpm install` → erro falso `border-border class does not exist`
 - Assumir que `colima start` criou o contexto docker → `docker info` sem "Server Version" (crie `docker context create colima`)
+- `next dev` 404ando `/_next/static/*` → `.next` corrompido pelo Google Drive (`make dev-web` symlinka `.next` pra fora do Drive; distDir absoluto NÃO resolve — Next força relativo)
+- `CORSMiddleware` adicionado antes do auth → preflight 401 → erro de CORS no browser (CORS por último = outermost)
+- Ler só `claims.org_id` no middleware Clerk → 400 `org_required` (token v2 traz org em `o.id`)
 
 ## Arquivos-chave (referência rápida)
 

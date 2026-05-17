@@ -25,7 +25,13 @@ dev-down:
 dev-api:
 	cd apps/api && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
+# Next força distDir relativo ao projeto, então tirar `.next` do Google Drive
+# (que corrompe o cache → assets 404) é via symlink pra fora do Drive.
+# CI/Vercel não rodam este target → `.next` é dir normal lá.
+NEXT_CACHE ?= $(HOME)/.cache/up-hiring/next
 dev-web:
+	@mkdir -p "$(NEXT_CACHE)"
+	@if [ ! -L apps/web/.next ]; then rm -rf apps/web/.next; ln -s "$(NEXT_CACHE)" apps/web/.next; fi
 	pnpm --filter web dev
 
 migrate:

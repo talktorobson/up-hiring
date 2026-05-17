@@ -32,6 +32,13 @@ make dev-web       # next :3000
 > `next dev` morrer com o erro enganoso `The 'border-border' class does
 > not exist`. Se já tinha rodado o dev: `rm -rf apps/web/.next` também.
 
+> **`.next` fora do Google Drive.** O sync do Drive corrompe o cache do
+> Next (sintoma: `/_next/static/*` 404, HTML serve mas assets não). Next
+> força `distDir` relativo ao projeto, então `make dev-web` faz `.next`
+> virar **symlink** pra `$HOME/.cache/up-hiring/next` (override `NEXT_CACHE`).
+> Rode via `make dev-web` (não `pnpm --filter web dev` cru). CI/Vercel não
+> rodam o target → `.next` normal lá.
+
 Smoke: `curl localhost:8000/health` → `{"status":"ok"}`; `localhost:3000`
 mostra a landing com botão "Entrar". Seed esperado: 2 tenants · 10 jobs ·
 70 stages · 60 candidatos · 100 applications.
