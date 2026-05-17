@@ -33,17 +33,21 @@ app = FastAPI(
 if settings.logfire_token:
     logfire.instrument_fastapi(app)
 
-# CORS (em prod, restringir origins)
+# Auth middleware (valida JWT Clerk + injeta tenant no contexto).
+# Adicionado ANTES do CORS de propósito: no Starlette o último
+# `add_middleware` fica mais externo, então o CORS abaixo envolve o auth e
+# responde o preflight OPTIONS (sem Authorization) antes do Clerk 401ar.
+app.add_middleware(ClerkAuthMiddleware)
+
+# CORS — outermost. Origens via settings (CSV) + regex pros previews Vercel.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"] if settings.app_env == "local" else ["https://app.seu-dominio.com.br"],
+    allow_origins=settings.cors_origins_list,
+    allow_origin_regex=settings.cors_allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Auth middleware (valida JWT Clerk + injeta tenant no contexto)
-app.add_middleware(ClerkAuthMiddleware)
 
 app.include_router(api_v1_router, prefix="/api/v1")
 

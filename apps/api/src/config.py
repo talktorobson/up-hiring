@@ -43,9 +43,20 @@ class Settings(BaseSettings):
     s3_bucket: str = Field(default="up-hiring-dev")
     s3_region: str = Field(default="us-east-1")
 
+    # CORS — origens permitidas (CSV). Previews da Vercel casam pelo regex,
+    # então só é preciso listar localhost + domínio(s) estáveis.
+    cors_allow_origins: str = Field(default="http://localhost:3000")
+    cors_allow_origin_regex: str = Field(
+        default=r"https://[a-z0-9-]+\.vercel\.app"
+    )
+
     # Observability
     sentry_dsn: str | None = Field(default=None)
     logfire_token: str | None = Field(default=None)
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]
 
 
 @lru_cache
