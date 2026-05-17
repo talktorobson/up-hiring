@@ -92,7 +92,13 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             return _unauthorized("Invalid token")
 
         user_id = claims.get("sub")
-        org_id = claims.get("org_id")
+        # Clerk v2 default session token carrega a org ativa em `o.id`
+        # (objeto compacto). Tokens com template customizado usam o `org_id`
+        # achatado. Aceita ambos pra não depender de config de dashboard.
+        org_claim = claims.get("o")
+        org_id = claims.get("org_id") or (
+            org_claim.get("id") if isinstance(org_claim, dict) else None
+        )
         if not user_id:
             return _unauthorized("Missing user")
 
