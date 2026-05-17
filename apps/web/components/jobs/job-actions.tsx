@@ -41,15 +41,12 @@ export function JobActions({ job }: { job: JobRead }) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  async function setStatus(status: "open" | "paused" | "closed") {
+  async function setStatus(
+    status: "open" | "paused" | "closed",
+    label: string,
+  ) {
     await update.mutateAsync({ status });
-    toast.success(
-      status === "paused"
-        ? "Vaga pausada"
-        : status === "closed"
-          ? "Vaga fechada"
-          : "Vaga reaberta",
-    );
+    toast.success(label);
   }
 
   async function onDelete() {
@@ -70,18 +67,29 @@ export function JobActions({ job }: { job: JobRead }) {
           <DropdownMenuItem onClick={() => setEditOpen(true)}>
             Editar
           </DropdownMenuItem>
-          {job.status !== "paused" && (
-            <DropdownMenuItem onClick={() => setStatus("paused")}>
+          {job.status !== "open" && (
+            <DropdownMenuItem
+              onClick={() =>
+                setStatus(
+                  "open",
+                  job.status === "draft" ? "Vaga publicada" : "Vaga reaberta",
+                )
+              }
+            >
+              {job.status === "draft" ? "Publicar" : "Reabrir"}
+            </DropdownMenuItem>
+          )}
+          {job.status === "open" && (
+            <DropdownMenuItem
+              onClick={() => setStatus("paused", "Vaga pausada")}
+            >
               Pausar
             </DropdownMenuItem>
           )}
-          {job.status === "paused" && (
-            <DropdownMenuItem onClick={() => setStatus("open")}>
-              Reabrir
-            </DropdownMenuItem>
-          )}
           {job.status !== "closed" && (
-            <DropdownMenuItem onClick={() => setStatus("closed")}>
+            <DropdownMenuItem
+              onClick={() => setStatus("closed", "Vaga fechada")}
+            >
               Fechar
             </DropdownMenuItem>
           )}
