@@ -132,26 +132,32 @@ Itens que dependem das suas contas (código já wired, só faltam credenciais):
       Vercel Preview.
 - [x] **Vercel Preview env vars**: setadas (§4) — Phase D verificada
       (preview → API Fly live → Supabase prod, delta confirmado).
-- [ ] **Clerk E2E** (Phase E): **2 test users em 2 orgs distintas**
-      (User A → Org A owner; User B → Org B owner — o happy-path testa
-      isolamento RLS entre orgs). Cada user deve pertencer a **uma só**
-      org pra a org ativa no token ser determinística. GitHub Actions
-      secrets (repo settings → Secrets → Actions):
+- [x] **Clerk E2E** (Phase E): happy-path **single-user** verde
+      (login → cria vaga → candidato → arrasta stage → refresh persiste).
+      O 2º user / RLS cross-org foi removido do E2E — limitação estrutural
+      do `@clerk/testing` multi-user numa instância **dev** (a 2ª sessão
+      não persiste); RLS já coberto em `apps/api/tests/test_rls*.py`.
+      Follow-up: **issue #108** (revisitar com instância Clerk prod).
+      GitHub Actions secrets (repo settings → Secrets → Actions):
 
       | Secret | Onde achar |
       |---|---|
       | `E2E_USER_A_EMAIL` / `…_PASSWORD` | credenciais do test user A |
-      | `E2E_USER_B_EMAIL` / `…_PASSWORD` | credenciais do test user B |
-      | `E2E_CLERK_USER_A_ID` / `…_B_ID` | Clerk Dashboard → Users → user → ID `user_…` |
-      | `E2E_CLERK_ORG_A_ID` / `…_B_ID` | Clerk Dashboard → Organizations → org → ID `org_…` |
-      | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk → API Keys (mesma instância dos users) |
+      | `E2E_CLERK_USER_A_ID` | Clerk Dashboard → Users → user → ID `user_…` |
+      | `E2E_CLERK_ORG_A_ID` | Clerk Dashboard → Organizations → org → ID `org_…` |
+      | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk → API Keys (mesma instância do user) |
       | `CLERK_SECRET_KEY` | Clerk → API Keys |
 
-      Os 4 IDs (`org_…`/`user_…`) são consumidos por `src.scripts.seed_e2e`
-      no workflow: em CI o webhook do Clerk não dispara, então o seed
-      provisiona Tenant+AppUser+Membership pros IDs reais — sem isso o
-      happy-path daria 403 `tenant_not_provisioned`. Faltando qualquer
-      secret, o workflow `E2E` faz **skip limpo** (não bloqueia merge).
+      ⚠️ Cole os secrets **sem espaço/newline à toa** — o spec faz
+      `.trim()` defensivo, mas Clerk rejeita identifier com whitespace
+      (`Identifier is invalid`). Os IDs `org_…`/`user_…` (A) são
+      consumidos por `src.scripts.seed_e2e` no workflow: em CI o webhook
+      do Clerk não dispara, então o seed provisiona Tenant+AppUser+
+      Membership pros IDs reais — sem isso o happy-path daria 403
+      `tenant_not_provisioned`. (`e2e.yml`/`seed_e2e` ainda aceitam os
+      secrets `…_B_…` — inertes hoje, prontos pro follow-up #108.)
+      Faltando qualquer secret de A, o workflow `E2E` faz **skip limpo**
+      (não bloqueia merge).
 - [ ] **Sentry**: rodar `pnpm dlx @sentry/wizard@latest -i nextjs --saas`
       (projeto `uphiring-web`) ou confirmar o DSN atual; setar
       `NEXT_PUBLIC_SENTRY_DSN`.
