@@ -24,20 +24,6 @@ const B_EMAIL = env("E2E_USER_B_EMAIL");
 const B_PASSWORD = env("E2E_USER_B_PASSWORD");
 const B_ORG_ID = env("E2E_CLERK_ORG_B_ID");
 
-// Fingerprint sem vazar o segredo: distingue whitespace/vazio/malformado
-// de "email válido mas inexistente na instância Clerk".
-function fingerprint(raw: string | undefined, trimmed: string | undefined) {
-  return {
-    rawLen: raw?.length ?? 0,
-    trimmedLen: trimmed?.length ?? 0,
-    hadWhitespace: (raw ?? "") !== (trimmed ?? ""),
-    hasAt: (trimmed ?? "").includes("@"),
-    hasDot: (trimmed ?? "").includes("."),
-    first: trimmed ? trimmed[0] : null,
-    last: trimmed ? trimmed[trimmed.length - 1] : null,
-  };
-}
-
 const haveCreds =
   !!A_EMAIL &&
   !!A_PASSWORD &&
@@ -91,6 +77,17 @@ test.describe("UpHiring happy path", () => {
       client?: {
         lastActiveSessionId?: string | null;
         sessions?: Array<{ id: string }>;
+        signIn?: {
+          create: (p: {
+            strategy: string;
+            identifier: string;
+            password: string;
+          }) => Promise<{
+            status?: string;
+            createdSessionId?: string;
+            supportedFirstFactors?: Array<{ strategy?: string }> | null;
+          }>;
+        };
       };
       setActive?: (p: {
         session?: string;
@@ -98,6 +95,50 @@ test.describe("UpHiring happy path", () => {
       }) => Promise<unknown>;
     };
   };
+
+  // signIn de User B via API crua (não @clerk/testing, que engole o
+  // status). Captura status/createdSessionId/firstFactors/erro e — como o
+  // reporter github suprime stdout — devolve tudo pra ser jogado na
+  // mensagem de erro (único canal visível em CI). Faz o setActive aqui.
+  async function rawSignIn(
+    p: Page,
+    identifier: string,
+    password: string,
+  ): Promise<void> {
+    const r = await p.evaluate(
+      async ({ identifier, password }) => {
+        const c = (window as unknown as ClerkWin).Clerk;
+        try {
+          const res = await c!.client!.signIn!.create({
+            strategy: "password",
+            identifier,
+            password,
+          });
+          if (res.status === "complete" && res.createdSessionId) {
+            await c!.setActive!({ session: res.createdSessionId });
+          }
+          return {
+            status: res.status ?? null,
+            createdSessionId: res.createdSessionId ?? null,
+            firstFactors:
+              res.supportedFirstFactors?.map((f) => f.strategy) ?? null,
+            err: null as string | null,
+          };
+        } catch (e) {
+          return {
+            status: null,
+            createdSessionId: null,
+            firstFactors: null,
+            err: e instanceof Error ? e.message : String(e),
+          };
+        }
+      },
+      { identifier, password },
+    );
+    if (r.status !== "complete" || !r.createdSessionId) {
+      throw new Error(`rawSignIn falhou: ${JSON.stringify(r)}`);
+    }
+  }
 
   // Snapshot do estado do ClerkJS — anexado às falhas pra diagnosticar
   // sessão/org/memberships sem adivinhação. Standalone (sem closure Node)
@@ -231,14 +272,6 @@ test.describe("UpHiring happy path", () => {
     // modelam melhor o isolamento RLS entre tenants.
     const ctxB = await browser.newContext();
     const pageB = await ctxB.newPage();
-    // Diagnóstico: encaminha console/erros do contexto B pro stdout do
-    // teste (Playwright não pipa console do browser por padrão).
-    pageB.on("console", (m) =>
-      // eslint-disable-next-line no-console
-      console.log(`[pageB:${m.type()}] ${m.text()}`),
-    );
-    // eslint-disable-next-line no-console
-    pageB.on("pageerror", (e) => console.log(`[pageB:pageerror] ${e.message}`));
     // Token de teste do Clerk é por-contexto: o page default herda do
     // clerkSetup(), mas um browser.newContext() precisa do setup explícito,
     // senão a proteção da instância dev bloqueia o signIn programático.
@@ -247,20 +280,7 @@ test.describe("UpHiring happy path", () => {
     // Espera o ClerkJS carregar (handshake dev em contexto frio) antes do
     // signIn, senão o setActive interno do signIn vira no-op.
     await waitClerkReady(pageB);
-    // eslint-disable-next-line no-console
-    console.log(
-      `[E2E_USER_B_EMAIL fp] ${JSON.stringify(
-        fingerprint(process.env.E2E_USER_B_EMAIL, B_EMAIL),
-      )}`,
-    );
-    await clerk.signIn({
-      page: pageB,
-      signInParams: {
-        strategy: "password",
-        identifier: B_EMAIL!,
-        password: B_PASSWORD!,
-      },
-    });
+    await rawSignIn(pageB, B_EMAIL!, B_PASSWORD!);
     await activateOrg(pageB, B_ORG_ID!);
     await pageB.goto("/jobs");
     await expect(pageB.getByText(jobTitle)).toHaveCount(0);
