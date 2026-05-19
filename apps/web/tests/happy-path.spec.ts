@@ -81,6 +81,7 @@ test.describe("UpHiring happy path", () => {
 
   test("create job, add candidate, move stage, RLS isolation", async ({
     page,
+    browser,
   }) => {
     const jobTitle = `Pessoa Vendedora Loja ${Date.now()}`;
 
@@ -131,18 +132,24 @@ test.describe("UpHiring happy path", () => {
     await expect(page.getByText("Joana Silva")).toBeVisible();
 
     // --- User B (outra org) não enxerga a vaga ---
-    await clerk.signOut({ page });
-    await page.goto("/");
+    // Contexto isolado em vez de signOut→signIn no mesmo contexto: a 2ª
+    // sessão não persiste de forma confiável no mesmo contexto (race
+    // conhecida do Clerk). Cookies/sessão totalmente separados também
+    // modelam melhor o isolamento RLS entre tenants.
+    const ctxB = await browser.newContext();
+    const pageB = await ctxB.newPage();
+    await pageB.goto("/");
     await clerk.signIn({
-      page,
+      page: pageB,
       signInParams: {
         strategy: "password",
         identifier: B_EMAIL!,
         password: B_PASSWORD!,
       },
     });
-    await activateOrg(page, B_ORG_ID!);
-    await page.goto("/jobs");
-    await expect(page.getByText(jobTitle)).toHaveCount(0);
+    await activateOrg(pageB, B_ORG_ID!);
+    await pageB.goto("/jobs");
+    await expect(pageB.getByText(jobTitle)).toHaveCount(0);
+    await ctxB.close();
   });
 });
