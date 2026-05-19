@@ -51,30 +51,45 @@ test.describe("UpHiring happy path", () => {
     await page.mouse.up();
   }
 
-  // @clerk/testing.signIn cria a sessão (cookie) mas NÃO hidrata o ClerkJS
-  // da página atual nem define org ativa — sem org o (app)/layout
-  // redireciona pra /select-org e a vaga nunca renderiza. Navegar pra
-  // /select-org (landing org-less) força o ClerkProvider a carregar a
-  // sessão; só então `setActive` tem sessão pra promover a org. Espera a
-  // org refletir antes de o caller navegar pra /jobs.
-  async function activateOrg(page: Page, orgId: string): Promise<void> {
-    await page.goto("/select-org");
-    await page.waitForFunction(() =>
-      Boolean(
-        (window as unknown as { Clerk?: { session?: unknown } }).Clerk
-          ?.session,
-      ),
-    );
-    await page.evaluate(async (id) => {
-      const w = window as unknown as {
-        Clerk: { setActive: (p: { organization: string }) => Promise<unknown> };
+  // @clerk/testing.signIn cria a sessão via client API, mas o getter
+  // Clerk.session pode não estar "ativo" ainda → setActive sem `session`
+  // dá "no active session", e depender de navegação pra hidratar é flaky
+  // (handshake da instância dev). Passa session+organization explícitos a
+  // partir de Clerk.client (disponível logo após o signIn, sem navegar) e
+  // espera a org refletir antes de o caller ir pra /jobs.
+  type ClerkWin = {
+    Clerk?: {
+      session?: { id?: string } | null;
+      organization?: { id?: string } | null;
+      client?: {
+        lastActiveSessionId?: string | null;
+        sessions?: Array<{ id: string }>;
       };
-      await w.Clerk.setActive({ organization: id });
+      setActive?: (p: {
+        session?: string;
+        organization?: string;
+      }) => Promise<unknown>;
+    };
+  };
+  async function activateOrg(page: Page, orgId: string): Promise<void> {
+    await page.waitForFunction(() => {
+      const c = (window as unknown as ClerkWin).Clerk;
+      return Boolean(
+        c?.session?.id ||
+          c?.client?.lastActiveSessionId ||
+          c?.client?.sessions?.length,
+      );
+    });
+    await page.evaluate(async (id) => {
+      const c = (window as unknown as ClerkWin).Clerk!;
+      const sid =
+        c.session?.id ??
+        c.client?.lastActiveSessionId ??
+        c.client?.sessions?.[0]?.id;
+      await c.setActive!({ session: sid, organization: id });
     }, orgId);
     await page.waitForFunction(
-      (id) =>
-        (window as unknown as { Clerk?: { organization?: { id?: string } } })
-          .Clerk?.organization?.id === id,
+      (id) => (window as unknown as ClerkWin).Clerk?.organization?.id === id,
       orgId,
     );
   }
