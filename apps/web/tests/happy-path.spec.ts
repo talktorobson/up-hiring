@@ -1,8 +1,4 @@
-import {
-  clerk,
-  clerkSetup,
-  setupClerkTestingToken,
-} from "@clerk/testing/playwright";
+import { clerk, clerkSetup } from "@clerk/testing/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -215,7 +211,6 @@ test.describe("UpHiring happy path", () => {
 
   test("create job, add candidate, move stage, RLS isolation", async ({
     page,
-    browser,
   }) => {
     const jobTitle = `Pessoa Vendedora Loja ${Date.now()}`;
 
@@ -266,24 +261,16 @@ test.describe("UpHiring happy path", () => {
     await expect(page.getByText("Joana Silva")).toBeVisible();
 
     // --- User B (outra org) não enxerga a vaga ---
-    // Contexto isolado em vez de signOut→signIn no mesmo contexto: a 2ª
-    // sessão não persiste de forma confiável no mesmo contexto (race
-    // conhecida do Clerk). Cookies/sessão totalmente separados também
-    // modelam melhor o isolamento RLS entre tenants.
-    const ctxB = await browser.newContext();
-    const pageB = await ctxB.newPage();
-    // Token de teste do Clerk é por-contexto: o page default herda do
-    // clerkSetup(), mas um browser.newContext() precisa do setup explícito,
-    // senão a proteção da instância dev bloqueia o signIn programático.
-    await setupClerkTestingToken({ page: pageB });
-    await pageB.goto("/");
-    // Espera o ClerkJS carregar (handshake dev em contexto frio) antes do
-    // signIn, senão o setActive interno do signIn vira no-op.
-    await waitClerkReady(pageB);
-    await rawSignIn(pageB, B_EMAIL!, B_PASSWORD!);
-    await activateOrg(pageB, B_ORG_ID!);
-    await pageB.goto("/jobs");
-    await expect(pageB.getByText(jobTitle)).toHaveCount(0);
-    await ctxB.close();
+    // MESMO contexto (default page): um browser.newContext() numa instância
+    // Clerk *dev* nunca bootstrapa o dev-browser/handshake, então setActive
+    // não persiste a 2ª sessão lá. O contexto default já tem o dev-browser
+    // funcionando (fluxo do User A passa). signOut A, rawSignIn B aqui.
+    await clerk.signOut({ page });
+    await page.goto("/");
+    await waitClerkReady(page);
+    await rawSignIn(page, B_EMAIL!, B_PASSWORD!);
+    await activateOrg(page, B_ORG_ID!);
+    await page.goto("/jobs");
+    await expect(page.getByText(jobTitle)).toHaveCount(0);
   });
 });
