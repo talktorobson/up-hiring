@@ -76,6 +76,8 @@ make dev-web     # next dev :3000
 
 - **`apps/web/next.config.mjs` envolto em `withSentryConfig(...)`** — sem isso, `sentry.client.config.ts` não é injetado no bundle e o SDK client-side nunca inicializa. `instrumentation.ts` cobre só server/edge (PR #23).
 
+- **Logfire web é CORS-blocked — não é bug, é limitação conhecida** — `lib/telemetry.ts` exporta OTLP/HTTP pro `logfire-api.pydantic.dev/v1/traces`; o ingest do Logfire **não** devolve `Access-Control-Allow-Origin` pra origem do browser, então **com ou sem** `NEXT_PUBLIC_LOGFIRE_TOKEN` os traces do browser nunca chegam e o console mostra `net::ERR_FAILED`/"No 'Access-Control-Allow-Origin'" de forma persistente. **Inofensivo** (não afeta dados do app — comprovado no delta Supabase da Phase D); telemetria web é efetivamente server-side-only. NÃO tratar como regressão; fix real = proxy same-origin (rota Next → Logfire), adiado Fase 1 (Sprint risk #4). Sentry client é separado (via `withSentryConfig`, com `tunnelRoute: /monitoring`) e não tem esse problema.
+
 - **`turbo.json > tasks.build.env`** — Turborepo só passa pro build as env vars listadas. Adicionar lá qualquer `NEXT_PUBLIC_*` ou env de build novo, senão Vercel logga "WILL NOT be available to your application".
 
 - **LocalStack pinned em `:3`** — `localstack/localstack:latest` virou paywalled (exit 55 sem `LOCALSTACK_AUTH_TOKEN`). v3 community ainda tem S3 free, suficiente pra dev (PR #26).
@@ -176,6 +178,7 @@ make dev-web     # next dev :3000
 - Setar secrets Clerk E2E sem os IDs A (`E2E_CLERK_{ORG,USER}_A_ID`) → `seed_e2e` no-op → happy-path 403 `tenant_not_provisioned` (workflow vermelho)
 - Tentar 2º user / RLS cross-org no E2E com Clerk **dev** → 2ª sessão não persiste; usar API tests p/ RLS (issue #108)
 - Secret Clerk colado com `\n`/espaço → `Identifier is invalid` (spec faz `.trim()`, mas cole limpo)
+- Tratar erro `logfire-api.pydantic.dev/v1/traces` CORS no console como bug → é limitação conhecida (web telemetry CORS-blocked, Fase 1)
 
 ## Arquivos-chave (referência rápida)
 
@@ -229,7 +232,7 @@ apps/web/                    # SEM src/ — app|lib|components na raiz, @/* → 
   lib/api.ts + api-types.ts  # ApiClient + tipos espelhados do Pydantic
   lib/use-api-client.ts + hooks.ts  # JWT Clerk + TanStack (qk keys)
   lib/cpf.ts                 # espelho client do DV de utils/cpf.py
-  lib/telemetry.ts           # OTel→Logfire (no-op sem token)
+  lib/telemetry.ts           # OTel→Logfire (no-op sem token; export browser CORS-blocked, ver footgun)
   components/providers.tsx   # QueryClient + erro global (401→sign-in, toast)
   components/ui/*            # kit shadcn new-york/slate
   components/app-shell/*     # sidebar/topbar/breadcrumbs/mobile-banner/nav-items

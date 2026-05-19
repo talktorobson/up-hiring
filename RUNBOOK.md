@@ -161,8 +161,17 @@ Itens que dependem das suas contas (código já wired, só faltam credenciais):
 - [ ] **Sentry**: rodar `pnpm dlx @sentry/wizard@latest -i nextjs --saas`
       (projeto `uphiring-web`) ou confirmar o DSN atual; setar
       `NEXT_PUBLIC_SENTRY_DSN`.
-- [ ] **Logfire web**: setar `NEXT_PUBLIC_LOGFIRE_TOKEN` (Vercel Preview +
-      `.env`) pra ativar traces do browser (no-op sem o token).
+- [~] **Logfire web** (limitação conhecida — não acionável só com setup):
+      mesmo **com** `NEXT_PUBLIC_LOGFIRE_TOKEN` setado, o export OTLP/HTTP
+      browser→`logfire-api.pydantic.dev/v1/traces` é **bloqueado por CORS**
+      (o ingest do Logfire não devolve `Access-Control-Allow-Origin` pra
+      origem do browser). Sintoma: erros `net::ERR_FAILED` / "No
+      'Access-Control-Allow-Origin'" no console — **inofensivos** (não
+      afetam dados do app; comprovado no delta Supabase da Phase D). Os
+      traces do browser **não chegam**; telemetria web é efetivamente
+      server-side-only. Sem o token, `initTelemetry` é no-op. Fix real =
+      proxy same-origin (rota Next reencaminhando pro Logfire) — adiado
+      pra Fase 1 (Sprint risk #4). Não setar o token não perde nada hoje.
 - [ ] **Branch protection** (opcional): adicionar `e2e` aos required checks
       **depois** que os secrets de Clerk E2E estiverem no lugar e o
       workflow tiver passado verde ao menos uma vez.
