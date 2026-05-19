@@ -114,7 +114,9 @@ make dev-web     # next dev :3000
 
 - **Token de sessão Clerk v2 traz a org em `o.id`, não `org_id` achatado** — o `org_id` plano só existe se um template de session token o adicionar. O default novo do Clerk põe a org ativa no claim compacto `o` (`o.id`). Middleware deve aceitar os dois: `claims.get("org_id") or claims.get("o",{}).get("id")`. Sem isso, todo endpoint tenant-scoped devolve 400 `org_required` mesmo logado numa org (PR #102 / Sprint 4 Phase C).
 
-- **E2E em CI não tem webhook Clerk** — o `organization.created` nunca chega no runner efêmero, então a árvore tenant/user/membership que prod materializa via webhook não existe. O happy-path loga test users reais → primeiro request autenticado bate em 403 `tenant_not_provisioned` (middleware) / 404 `user_not_provisioned` (`_deps`). Fix: `src.scripts.seed_e2e` (env-gated, idempotente, no-op sem os IDs) roda no `e2e.yml` depois do `seed --reset` e provisiona Tenant+AppUser+Membership pros IDs reais (`E2E_CLERK_{ORG,USER}_{A,B}_ID`). NÃO muda prod (continua via webhook). Setar só `E2E_USER_*` sem os 4 IDs → workflow vermelho, não skip (Phase E).
+- **E2E em CI não tem webhook Clerk** — o `organization.created` nunca chega no runner efêmero, então a árvore tenant/user/membership que prod materializa via webhook não existe. O happy-path loga test user real → primeiro request autenticado bate em 403 `tenant_not_provisioned` (middleware) / 404 `user_not_provisioned` (`_deps`). Fix: `src.scripts.seed_e2e` (env-gated, idempotente, no-op sem os IDs) roda no `e2e.yml` depois do `seed --reset` e provisiona Tenant+AppUser+Membership pros IDs reais (`E2E_CLERK_{ORG,USER}_A_ID`). NÃO muda prod (continua via webhook). Setar só `E2E_USER_A_*` sem os IDs → workflow vermelho, não skip (Phase E).
+
+- **E2E happy-path é single-user; multi-user Clerk não persiste em instância dev** — `@clerk/testing` autentica o 1º user no contexto default ok, mas a **2ª** sessão (signOut→signIn ou `browser.newContext()`) não fixa: `signIn.create` completa, `setActive({session})` resolve, e mesmo assim `window.Clerk` fica sem sessão (dev-browser/handshake não bootstrapado p/ 2º user numa instância **dev**). Por isso o teste de isolamento RLS cross-org saiu do E2E — RLS já é coberto determinístico em `apps/api/tests/test_rls.py`/`test_rls_domain.py`. Revisitar só com instância Clerk **prod** (issue #108). Bônus: secret colado no GitHub com `\n`/espaço → Clerk `Identifier is invalid`; o spec faz `.trim()` defensivo, mas cole limpo.
 
 ## Git / repo
 
@@ -171,7 +173,9 @@ make dev-web     # next dev :3000
 - `next dev` 404ando `/_next/static/*` → `.next` corrompido pelo Google Drive (`make dev-web` symlinka `.next` pra fora do Drive; distDir absoluto NÃO resolve — Next força relativo)
 - `CORSMiddleware` adicionado antes do auth → preflight 401 → erro de CORS no browser (CORS por último = outermost)
 - Ler só `claims.org_id` no middleware Clerk → 400 `org_required` (token v2 traz org em `o.id`)
-- Setar secrets Clerk E2E sem os 4 IDs (`E2E_CLERK_{ORG,USER}_{A,B}_ID`) → `seed_e2e` no-op → happy-path 403 `tenant_not_provisioned` (workflow vermelho)
+- Setar secrets Clerk E2E sem os IDs A (`E2E_CLERK_{ORG,USER}_A_ID`) → `seed_e2e` no-op → happy-path 403 `tenant_not_provisioned` (workflow vermelho)
+- Tentar 2º user / RLS cross-org no E2E com Clerk **dev** → 2ª sessão não persiste; usar API tests p/ RLS (issue #108)
+- Secret Clerk colado com `\n`/espaço → `Identifier is invalid` (spec faz `.trim()`, mas cole limpo)
 
 ## Arquivos-chave (referência rápida)
 
