@@ -37,7 +37,17 @@ export function initTelemetry(): boolean {
   registerInstrumentations({
     instrumentations: [
       new FetchInstrumentation({
-        propagateTraceHeaderCorsUrls: [/.*/],
+        // NÃO propagar `traceparent` cross-origin. Com `[/.*/]` o header
+        // ia em TODO fetch — inclusive pro endpoint de token do Clerk e
+        // pro Logfire, cujo CORS rejeita o header → quebra a auth inteira
+        // (Sprint risk #4). Default ([]) = sem propagação cross-origin;
+        // stitching FE→BE fica pra Fase 1.
+        ignoreUrls: [
+          /clerk\.accounts\.dev/,
+          /logfire-api\.pydantic\.dev/,
+          /\.sentry\.io/,
+          /\/monitoring/,
+        ],
       }),
     ],
   });
