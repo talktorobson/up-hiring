@@ -16,6 +16,12 @@ let tracer: Tracer | null = null;
  * Inicializa OTel web exportando pro Logfire (OTLP/HTTP). No-op se o token
  * não estiver configurado — assim CI/preview sem token não quebram (a
  * propagação traceparent frontend→backend fica pra Fase 1, #risco 4).
+ *
+ * Limitação conhecida (NÃO é bug): mesmo com o token, o ingest do Logfire
+ * não devolve `Access-Control-Allow-Origin` pra origem do browser, então
+ * o export OTLP/HTTP é bloqueado por CORS — os traces do browser nunca
+ * chegam e o console loga `net::ERR_FAILED` persistente. Inofensivo (não
+ * afeta dados do app). Fix real = proxy same-origin → Fase 1 (risk #4).
  */
 export function initTelemetry(): boolean {
   if (started || typeof window === "undefined") return started;
