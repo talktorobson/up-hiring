@@ -114,6 +114,8 @@ make dev-web     # next dev :3000
 
 - **Token de sessão Clerk v2 traz a org em `o.id`, não `org_id` achatado** — o `org_id` plano só existe se um template de session token o adicionar. O default novo do Clerk põe a org ativa no claim compacto `o` (`o.id`). Middleware deve aceitar os dois: `claims.get("org_id") or claims.get("o",{}).get("id")`. Sem isso, todo endpoint tenant-scoped devolve 400 `org_required` mesmo logado numa org (PR #102 / Sprint 4 Phase C).
 
+- **E2E em CI não tem webhook Clerk** — o `organization.created` nunca chega no runner efêmero, então a árvore tenant/user/membership que prod materializa via webhook não existe. O happy-path loga test users reais → primeiro request autenticado bate em 403 `tenant_not_provisioned` (middleware) / 404 `user_not_provisioned` (`_deps`). Fix: `src.scripts.seed_e2e` (env-gated, idempotente, no-op sem os IDs) roda no `e2e.yml` depois do `seed --reset` e provisiona Tenant+AppUser+Membership pros IDs reais (`E2E_CLERK_{ORG,USER}_{A,B}_ID`). NÃO muda prod (continua via webhook). Setar só `E2E_USER_*` sem os 4 IDs → workflow vermelho, não skip (Phase E).
+
 ## Git / repo
 
 - `main` é protegida: PR obrigatório, status checks `api` + `web` exigidos, linear history, force-push e delete bloqueados. Owner pode `gh pr merge --admin` em casos extremos (review automática de bot deixa o PR `BLOCKED` mesmo com tudo verde).
@@ -169,6 +171,7 @@ make dev-web     # next dev :3000
 - `next dev` 404ando `/_next/static/*` → `.next` corrompido pelo Google Drive (`make dev-web` symlinka `.next` pra fora do Drive; distDir absoluto NÃO resolve — Next força relativo)
 - `CORSMiddleware` adicionado antes do auth → preflight 401 → erro de CORS no browser (CORS por último = outermost)
 - Ler só `claims.org_id` no middleware Clerk → 400 `org_required` (token v2 traz org em `o.id`)
+- Setar secrets Clerk E2E sem os 4 IDs (`E2E_CLERK_{ORG,USER}_{A,B}_ID`) → `seed_e2e` no-op → happy-path 403 `tenant_not_provisioned` (workflow vermelho)
 
 ## Arquivos-chave (referência rápida)
 
@@ -196,6 +199,7 @@ apps/api/
   src/api/v1/me.py           # GET /me (user+tenant+role) — usado em settings
   src/api/v1/webhooks_clerk.py # Clerk webhook (svix verify)
   src/scripts/seed.py        # make seed: 2 tenants demo, --reset (org_demo_*)
+  src/scripts/seed_e2e.py    # CI E2E: provisiona IDs Clerk reais (env-gated, no webhook)
   fly.toml                   # release_command, region gru, auto_stop
   Dockerfile                 # uv-based build
   alembic/env.py             # usa ensure_async_driver

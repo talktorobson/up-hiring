@@ -120,24 +120,44 @@ Link: _(adicionar após gravar)_.
 
 Itens que dependem das suas contas (código já wired, só faltam credenciais):
 
-> Progresso (2026-05-18): Fases A, B-1 (tunnel→local) e C verificadas
-> localmente; Fly billing restaurado, API redeployada (#100 CORS + #102
-> Clerk `o.id` live); B-2 (webhook Clerk→Fly→Supabase) verificado 200
-> `dispatched`. Esta seção fica como referência de re-setup.
+> Progresso (2026-05-18): Fases A, B-1 (tunnel→local), B-2 (webhook
+> Clerk→Fly→Supabase 200 `dispatched`) e C verificadas; Fly billing
+> restaurado, API redeployada (#100 CORS + #102 Clerk `o.id` + #105
+> telemetry live). **Phase D verificada** via delta no Supabase prod
+> (preview Vercel → Clerk → Fly → Supabase: job/stage/candidate/
+> application/activity materializados). Esta seção fica como referência
+> de re-setup.
 
 - [x] **Clerk Dev**: app com Organizations habilitado; keys no `.env` e
       Vercel Preview.
-- [ ] **Clerk E2E**: 2 test users + 1 org; gravar como GitHub Actions
-      secrets `E2E_USER_A_EMAIL/PASSWORD`, `E2E_USER_B_EMAIL/PASSWORD`,
-      `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Sem isso o
-      workflow `E2E` faz skip limpo (não bloqueia merge).
+- [x] **Vercel Preview env vars**: setadas (§4) — Phase D verificada
+      (preview → API Fly live → Supabase prod, delta confirmado).
+- [ ] **Clerk E2E** (Phase E): **2 test users em 2 orgs distintas**
+      (User A → Org A owner; User B → Org B owner — o happy-path testa
+      isolamento RLS entre orgs). Cada user deve pertencer a **uma só**
+      org pra a org ativa no token ser determinística. GitHub Actions
+      secrets (repo settings → Secrets → Actions):
+
+      | Secret | Onde achar |
+      |---|---|
+      | `E2E_USER_A_EMAIL` / `…_PASSWORD` | credenciais do test user A |
+      | `E2E_USER_B_EMAIL` / `…_PASSWORD` | credenciais do test user B |
+      | `E2E_CLERK_USER_A_ID` / `…_B_ID` | Clerk Dashboard → Users → user → ID `user_…` |
+      | `E2E_CLERK_ORG_A_ID` / `…_B_ID` | Clerk Dashboard → Organizations → org → ID `org_…` |
+      | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk → API Keys (mesma instância dos users) |
+      | `CLERK_SECRET_KEY` | Clerk → API Keys |
+
+      Os 4 IDs (`org_…`/`user_…`) são consumidos por `src.scripts.seed_e2e`
+      no workflow: em CI o webhook do Clerk não dispara, então o seed
+      provisiona Tenant+AppUser+Membership pros IDs reais — sem isso o
+      happy-path daria 403 `tenant_not_provisioned`. Faltando qualquer
+      secret, o workflow `E2E` faz **skip limpo** (não bloqueia merge).
 - [ ] **Sentry**: rodar `pnpm dlx @sentry/wizard@latest -i nextjs --saas`
       (projeto `uphiring-web`) ou confirmar o DSN atual; setar
       `NEXT_PUBLIC_SENTRY_DSN`.
 - [ ] **Logfire web**: setar `NEXT_PUBLIC_LOGFIRE_TOKEN` (Vercel Preview +
       `.env`) pra ativar traces do browser (no-op sem o token).
-- [x] **Vercel Preview env vars**: setadas (§4) — Phase D em verificação
-      via PR de teste (preview → API Fly live → Supabase).
 - [ ] **Branch protection** (opcional): adicionar `e2e` aos required checks
-      depois que os secrets de Clerk E2E estiverem no lugar.
+      **depois** que os secrets de Clerk E2E estiverem no lugar e o
+      workflow tiver passado verde ao menos uma vez.
 - [ ] **Demo 90s**: gravar e colar o link em §7.
