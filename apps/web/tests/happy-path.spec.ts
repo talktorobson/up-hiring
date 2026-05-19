@@ -51,13 +51,18 @@ test.describe("UpHiring happy path", () => {
     await page.mouse.up();
   }
 
-  // @clerk/testing.signIn não define org ativa; sem ela o (app)/layout
-  // redireciona pra /select-org e a vaga nunca renderiza. setActive via
-  // ClerkJS e espera a org refletir na sessão antes de navegar.
+  // @clerk/testing.signIn cria a sessão (cookie) mas NÃO hidrata o ClerkJS
+  // da página atual nem define org ativa — sem org o (app)/layout
+  // redireciona pra /select-org e a vaga nunca renderiza. Navegar pra
+  // /select-org (landing org-less) força o ClerkProvider a carregar a
+  // sessão; só então `setActive` tem sessão pra promover a org. Espera a
+  // org refletir antes de o caller navegar pra /jobs.
   async function activateOrg(page: Page, orgId: string): Promise<void> {
+    await page.goto("/select-org");
     await page.waitForFunction(() =>
       Boolean(
-        (window as unknown as { Clerk?: { loaded?: boolean } }).Clerk?.loaded,
+        (window as unknown as { Clerk?: { session?: unknown } }).Clerk
+          ?.session,
       ),
     );
     await page.evaluate(async (id) => {
