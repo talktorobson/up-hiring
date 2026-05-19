@@ -63,8 +63,14 @@ test.describe("UpHiring happy path", () => {
   // espera a org refletir antes de o caller ir pra /jobs.
   type ClerkWin = {
     Clerk?: {
+      loaded?: boolean;
       session?: { id?: string } | null;
       organization?: { id?: string } | null;
+      user?: {
+        id?: string;
+        primaryEmailAddress?: { emailAddress?: string } | null;
+        organizationMemberships?: Array<{ organization: { id: string } }>;
+      } | null;
       client?: {
         lastActiveSessionId?: string | null;
         sessions?: Array<{ id: string }>;
@@ -75,15 +81,57 @@ test.describe("UpHiring happy path", () => {
       }) => Promise<unknown>;
     };
   };
-  async function activateOrg(page: Page, orgId: string): Promise<void> {
-    await page.waitForFunction(() => {
-      const c = (window as unknown as ClerkWin).Clerk;
-      return Boolean(
-        c?.session?.id ||
-          c?.client?.lastActiveSessionId ||
-          c?.client?.sessions?.length,
-      );
+
+  // Snapshot do estado do ClerkJS — anexado às falhas pra diagnosticar
+  // sessão/org/memberships sem adivinhação. Standalone (sem closure Node)
+  // pra rodar dentro de page.evaluate.
+  function clerkSnapshot(): string {
+    const c = (window as unknown as ClerkWin).Clerk;
+    return JSON.stringify({
+      loaded: c?.loaded ?? null,
+      userId: c?.user?.id ?? null,
+      email: c?.user?.primaryEmailAddress?.emailAddress ?? null,
+      sessionId: c?.session?.id ?? null,
+      clientSessions: c?.client?.sessions?.length ?? null,
+      lastActiveSessionId: c?.client?.lastActiveSessionId ?? null,
+      activeOrg: c?.organization?.id ?? null,
+      memberships:
+        c?.user?.organizationMemberships?.map((m) => m.organization.id) ??
+        null,
     });
+  }
+
+  // Espera o ClerkJS terminar load/handshake (instância dev) antes do
+  // signIn — num contexto frio o signIn pode rodar com o client ainda
+  // não pronto e o setActive interno vira no-op (sem sessão).
+  async function waitClerkReady(p: Page): Promise<void> {
+    await p.waitForFunction(
+      () => (window as unknown as ClerkWin).Clerk?.loaded === true,
+      undefined,
+      { timeout: 30_000 },
+    );
+  }
+
+  async function activateOrg(page: Page, orgId: string): Promise<void> {
+    try {
+      await page.waitForFunction(
+        () => {
+          const c = (window as unknown as ClerkWin).Clerk;
+          return Boolean(
+            c?.session?.id ||
+              c?.client?.lastActiveSessionId ||
+              c?.client?.sessions?.length,
+          );
+        },
+        undefined,
+        { timeout: 30_000 },
+      );
+    } catch {
+      const snap = await page.evaluate(clerkSnapshot);
+      throw new Error(
+        `activateOrg(${orgId}): sessão Clerk não estabelecida. Clerk=${snap}`,
+      );
+    }
     await page.evaluate(async (id) => {
       const c = (window as unknown as ClerkWin).Clerk!;
       const sid =
@@ -92,10 +140,19 @@ test.describe("UpHiring happy path", () => {
         c.client?.sessions?.[0]?.id;
       await c.setActive!({ session: sid, organization: id });
     }, orgId);
-    await page.waitForFunction(
-      (id) => (window as unknown as ClerkWin).Clerk?.organization?.id === id,
-      orgId,
-    );
+    try {
+      await page.waitForFunction(
+        (id) =>
+          (window as unknown as ClerkWin).Clerk?.organization?.id === id,
+        orgId,
+        { timeout: 20_000 },
+      );
+    } catch {
+      const snap = await page.evaluate(clerkSnapshot);
+      throw new Error(
+        `activateOrg(${orgId}): org não ficou ativa. Clerk=${snap}`,
+      );
+    }
   }
 
   test("create job, add candidate, move stage, RLS isolation", async ({
@@ -157,11 +214,22 @@ test.describe("UpHiring happy path", () => {
     // modelam melhor o isolamento RLS entre tenants.
     const ctxB = await browser.newContext();
     const pageB = await ctxB.newPage();
+    // Diagnóstico: encaminha console/erros do contexto B pro stdout do
+    // teste (Playwright não pipa console do browser por padrão).
+    pageB.on("console", (m) =>
+      // eslint-disable-next-line no-console
+      console.log(`[pageB:${m.type()}] ${m.text()}`),
+    );
+    // eslint-disable-next-line no-console
+    pageB.on("pageerror", (e) => console.log(`[pageB:pageerror] ${e.message}`));
     // Token de teste do Clerk é por-contexto: o page default herda do
     // clerkSetup(), mas um browser.newContext() precisa do setup explícito,
     // senão a proteção da instância dev bloqueia o signIn programático.
     await setupClerkTestingToken({ page: pageB });
     await pageB.goto("/");
+    // Espera o ClerkJS carregar (handshake dev em contexto frio) antes do
+    // signIn, senão o setActive interno do signIn vira no-op.
+    await waitClerkReady(pageB);
     await clerk.signIn({
       page: pageB,
       signInParams: {
