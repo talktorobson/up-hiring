@@ -14,12 +14,29 @@ import { expect, test, type Page } from "@playwright/test";
  * o teste é SKIPPED em vez de falhar, pra não travar o merge enquanto os
  * secrets não estão provisionados.
  */
-const A_EMAIL = process.env.E2E_USER_A_EMAIL;
-const A_PASSWORD = process.env.E2E_USER_A_PASSWORD;
-const A_ORG_ID = process.env.E2E_CLERK_ORG_A_ID;
-const B_EMAIL = process.env.E2E_USER_B_EMAIL;
-const B_PASSWORD = process.env.E2E_USER_B_PASSWORD;
-const B_ORG_ID = process.env.E2E_CLERK_ORG_B_ID;
+// .trim() defensivo: secret colado no GitHub frequentemente carrega \n ou
+// espaço → Clerk rejeita com "Identifier is invalid".
+const env = (k: string): string | undefined => process.env[k]?.trim();
+const A_EMAIL = env("E2E_USER_A_EMAIL");
+const A_PASSWORD = env("E2E_USER_A_PASSWORD");
+const A_ORG_ID = env("E2E_CLERK_ORG_A_ID");
+const B_EMAIL = env("E2E_USER_B_EMAIL");
+const B_PASSWORD = env("E2E_USER_B_PASSWORD");
+const B_ORG_ID = env("E2E_CLERK_ORG_B_ID");
+
+// Fingerprint sem vazar o segredo: distingue whitespace/vazio/malformado
+// de "email válido mas inexistente na instância Clerk".
+function fingerprint(raw: string | undefined, trimmed: string | undefined) {
+  return {
+    rawLen: raw?.length ?? 0,
+    trimmedLen: trimmed?.length ?? 0,
+    hadWhitespace: (raw ?? "") !== (trimmed ?? ""),
+    hasAt: (trimmed ?? "").includes("@"),
+    hasDot: (trimmed ?? "").includes("."),
+    first: trimmed ? trimmed[0] : null,
+    last: trimmed ? trimmed[trimmed.length - 1] : null,
+  };
+}
 
 const haveCreds =
   !!A_EMAIL &&
@@ -230,6 +247,12 @@ test.describe("UpHiring happy path", () => {
     // Espera o ClerkJS carregar (handshake dev em contexto frio) antes do
     // signIn, senão o setActive interno do signIn vira no-op.
     await waitClerkReady(pageB);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[E2E_USER_B_EMAIL fp] ${JSON.stringify(
+        fingerprint(process.env.E2E_USER_B_EMAIL, B_EMAIL),
+      )}`,
+    );
     await clerk.signIn({
       page: pageB,
       signInParams: {
