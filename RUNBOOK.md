@@ -120,8 +120,13 @@ Link: _(adicionar após gravar)_.
 
 Itens que dependem das suas contas (código já wired, só faltam credenciais):
 
-- [ ] **Clerk Dev**: app `uphiring-dev` com Organizations habilitado; copiar
-      keys pro `.env` e Vercel Preview.
+> Progresso (2026-05-18): Fases A, B-1 (tunnel→local) e C verificadas
+> localmente; Fly billing restaurado, API redeployada (#100 CORS + #102
+> Clerk `o.id` live); B-2 (webhook Clerk→Fly→Supabase) verificado 200
+> `dispatched`. Esta seção fica como referência de re-setup.
+
+- [x] **Clerk Dev**: app com Organizations habilitado; keys no `.env` e
+      Vercel Preview.
 - [ ] **Clerk E2E**: 2 test users + 1 org; gravar como GitHub Actions
       secrets `E2E_USER_A_EMAIL/PASSWORD`, `E2E_USER_B_EMAIL/PASSWORD`,
       `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Sem isso o
@@ -131,7 +136,8 @@ Itens que dependem das suas contas (código já wired, só faltam credenciais):
       `NEXT_PUBLIC_SENTRY_DSN`.
 - [ ] **Logfire web**: setar `NEXT_PUBLIC_LOGFIRE_TOKEN` (Vercel Preview +
       `.env`) pra ativar traces do browser (no-op sem o token).
-- [ ] **Vercel Preview env vars**: ver §4.
+- [x] **Vercel Preview env vars**: setadas (§4) — Phase D em verificação
+      via PR de teste (preview → API Fly live → Supabase).
 - [ ] **Branch protection** (opcional): adicionar `e2e` aos required checks
       depois que os secrets de Clerk E2E estiverem no lugar.
 - [ ] **Demo 90s**: gravar e colar o link em §7.
