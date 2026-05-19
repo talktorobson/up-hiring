@@ -1,4 +1,8 @@
-import { clerk, clerkSetup } from "@clerk/testing/playwright";
+import {
+  clerk,
+  clerkSetup,
+  setupClerkTestingToken,
+} from "@clerk/testing/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -153,6 +157,10 @@ test.describe("UpHiring happy path", () => {
     // modelam melhor o isolamento RLS entre tenants.
     const ctxB = await browser.newContext();
     const pageB = await ctxB.newPage();
+    // Token de teste do Clerk é por-contexto: o page default herda do
+    // clerkSetup(), mas um browser.newContext() precisa do setup explícito,
+    // senão a proteção da instância dev bloqueia o signIn programático.
+    await setupClerkTestingToken({ page: pageB });
     await pageB.goto("/");
     await clerk.signIn({
       page: pageB,
