@@ -12,14 +12,18 @@ import { expect, test, type Page } from "@playwright/test";
  */
 const A_EMAIL = process.env.E2E_USER_A_EMAIL;
 const A_PASSWORD = process.env.E2E_USER_A_PASSWORD;
+const A_ORG_ID = process.env.E2E_CLERK_ORG_A_ID;
 const B_EMAIL = process.env.E2E_USER_B_EMAIL;
 const B_PASSWORD = process.env.E2E_USER_B_PASSWORD;
+const B_ORG_ID = process.env.E2E_CLERK_ORG_B_ID;
 
 const haveCreds =
   !!A_EMAIL &&
   !!A_PASSWORD &&
+  !!A_ORG_ID &&
   !!B_EMAIL &&
   !!B_PASSWORD &&
+  !!B_ORG_ID &&
   !!process.env.CLERK_SECRET_KEY;
 
 test.describe("UpHiring happy path", () => {
@@ -47,6 +51,29 @@ test.describe("UpHiring happy path", () => {
     await page.mouse.up();
   }
 
+  // @clerk/testing.signIn não define org ativa; sem ela o (app)/layout
+  // redireciona pra /select-org e a vaga nunca renderiza. setActive via
+  // ClerkJS e espera a org refletir na sessão antes de navegar.
+  async function activateOrg(page: Page, orgId: string): Promise<void> {
+    await page.waitForFunction(() =>
+      Boolean(
+        (window as unknown as { Clerk?: { loaded?: boolean } }).Clerk?.loaded,
+      ),
+    );
+    await page.evaluate(async (id) => {
+      const w = window as unknown as {
+        Clerk: { setActive: (p: { organization: string }) => Promise<unknown> };
+      };
+      await w.Clerk.setActive({ organization: id });
+    }, orgId);
+    await page.waitForFunction(
+      (id) =>
+        (window as unknown as { Clerk?: { organization?: { id?: string } } })
+          .Clerk?.organization?.id === id,
+      orgId,
+    );
+  }
+
   test("create job, add candidate, move stage, RLS isolation", async ({
     page,
   }) => {
@@ -62,6 +89,7 @@ test.describe("UpHiring happy path", () => {
         password: A_PASSWORD!,
       },
     });
+    await activateOrg(page, A_ORG_ID!);
 
     await page.goto("/jobs");
     await page.getByRole("link", { name: "Nova vaga" }).click();
@@ -108,6 +136,7 @@ test.describe("UpHiring happy path", () => {
         password: B_PASSWORD!,
       },
     });
+    await activateOrg(page, B_ORG_ID!);
     await page.goto("/jobs");
     await expect(page.getByText(jobTitle)).toHaveCount(0);
   });
