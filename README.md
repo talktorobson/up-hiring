@@ -1,4 +1,11 @@
-# UpHiring
+# UpHiring — DEPRECATED (2026-06-12)
+
+> **Este projeto foi incorporado à plataforma TRIUM Portal como módulo de
+> Recrutamento & Seleção** (repo privado `trium-portal`, ADR-0005 de lá).
+> O domínio (vagas, pipeline, candidatos), o stack de auth Clerk e os
+> padrões de RLS/CI vivem lá agora. O banco Supabase foi repropositado
+> (dump final arquivado localmente). Este repositório fica arquivado
+> como referência de padrões e histórico.
 
 ATS (Applicant Tracking System) focado no mercado brasileiro, segmento SME serviços e comércio.
 
